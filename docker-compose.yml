@@ -1,0 +1,74 @@
+services:
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_BASE: ""
+    ports:
+      - "3080:80"
+    depends_on:
+      backend:
+        condition: service_started
+
+  backend:
+    build: ./backend
+    ports:
+      - "8008:8000"
+    env_file:
+      - .env
+    environment:
+      DB_HOST: mariadb
+      DB_PORT: 3306
+      DB_NAME: appempire
+      DB_USER: appempire
+      DB_PASSWORD: ${DB_PASSWORD:-change_me_appempire}
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minio}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minio_secret_change}
+      MINIO_BUCKET: empire
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      minio:
+        condition: service_started
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 25s
+
+  mariadb:
+    image: mariadb:11
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:-root_change_me}
+      MYSQL_DATABASE: appempire
+      MYSQL_USER: appempire
+      MYSQL_PASSWORD: ${DB_PASSWORD:-change_me_appempire}
+    volumes:
+      - mariadb_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minio}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minio_secret_change}
+    volumes:
+      - minio_data:/data
+
+volumes:
+  mariadb_data:
+  minio_data:
