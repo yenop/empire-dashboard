@@ -132,10 +132,19 @@ h3 {
 }
 .skills li {
   display: grid;
-  grid-template-columns: 100px 1fr 32px;
+  grid-template-columns: minmax(4.5rem, 100px) minmax(0, 1fr) 2rem;
   align-items: center;
   gap: 0.5rem;
   font-size: 0.75rem;
+}
+@media (max-width: 380px) {
+  .skills li {
+    grid-template-columns: 1fr;
+    gap: 0.3rem;
+  }
+  .skills li .n {
+    text-align: left;
+  }
 }
 .bar {
   height: 4px;

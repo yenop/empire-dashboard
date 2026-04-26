@@ -81,6 +81,7 @@ onMounted(async () => {
   border-radius: 8px;
   border: 1px solid #ffffff10;
   background: rgba(59, 130, 246, 0.06);
+  overflow-wrap: anywhere;
 }
 .human strong {
   color: var(--info);

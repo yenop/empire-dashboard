@@ -123,6 +123,11 @@ h3 {
   font-size: 0.7rem;
   font-family: var(--font-mono);
 }
+@media (max-width: 420px) {
+  .metrics {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
 .lab {
   display: block;
   color: var(--text-muted);

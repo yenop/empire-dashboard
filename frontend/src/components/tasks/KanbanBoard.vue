@@ -70,7 +70,12 @@ function colLabel(k) {
   gap: 0.75rem;
   align-items: start;
 }
-@media (max-width: 900px) {
+@media (max-width: 1024px) and (min-width: 561px) {
+  .board {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+@media (max-width: 560px) {
   .board {
     grid-template-columns: 1fr;
   }
@@ -100,8 +105,13 @@ function colLabel(k) {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-  max-height: 60vh;
+  max-height: min(60vh, 520px);
   overflow: auto;
+}
+@media (max-width: 560px) {
+  .list {
+    max-height: min(50vh, 400px);
+  }
 }
 .card {
   padding: 0.65rem 0.5rem;

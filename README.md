@@ -91,3 +91,33 @@ Pour l’intégration avec un gateway OpenClaw, définis `OPENCLAW_GATEWAY_URL` 
 ---
 
 En cas de doute, commence par : `.env` complet, hash Argon2 valide, puis `docker compose up -d --build` et accès à http://localhost:3080.
+
+
+
+nextly.ovh (51.178.52.121)
+│
+├── nextly.ovh / www.nextly.ovh
+│   └── ✅ Hub statique → /var/www/hub (fichier local dans nginx)
+│
+├── orchestrator.nextly.ovh
+│   └── ✅ OTT Dashboard Angular → /var/www/dashboard (local)
+│       └── /api/ → http://app:3000 (container Docker OTT)
+│
+├── app.nextly.ovh
+│   └── ✅ même config qu'orchestrator (doublon OTT)
+│
+├── cryptobot.nextly.ovh
+│   └── ✅ Frontend → /var/www/cryptobot (local)
+│       └── /api/ → http://172.21.0.1:8092 (host gateway Docker)
+│
+├── communityradar.nextly.ovh
+│   └── ✅ → http://51.178.52.121:8090 (IP publique VPS)
+│
+├── capcut-replicate.nextly.ovh
+│   └── ⚠️ → http://51.178.52.121:8086 (cert archive, pas live)
+│
+├── appmagictracker.nextly.ovh
+│   └── ⚠️ → http://appmagic-frontend:80 (nom container OTT ?)
+│
+└── empire-dash.nextly.ovh
+    └── ❌ 502 → http://localhost:8008 + :3080

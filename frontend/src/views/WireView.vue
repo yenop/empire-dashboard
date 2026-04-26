@@ -139,16 +139,11 @@ onMounted(loadConversations)
   gap: 1rem;
   min-height: 420px;
 }
-@media (max-width: 800px) {
-  .layout {
-    grid-template-columns: 1fr;
-  }
-}
 .conv-list {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
-  max-height: 70vh;
+  max-height: min(70vh, 520px);
   overflow: auto;
 }
 .conv-btn {
@@ -195,6 +190,17 @@ onMounted(loadConversations)
   padding: 1rem;
   max-height: 70vh;
   overflow: auto;
+}
+@media (max-width: 800px) {
+  .layout {
+    grid-template-columns: 1fr;
+  }
+  .conv-list {
+    max-height: min(40vh, 280px);
+  }
+  .thread {
+    max-height: min(55vh, 480px);
+  }
 }
 .empty {
   color: var(--text-muted);

@@ -73,6 +73,8 @@ async function submit() {
   width: 100%;
   max-width: 380px;
   padding: 2rem;
+  padding-left: max(1.25rem, env(safe-area-inset-left));
+  padding-right: max(1.25rem, env(safe-area-inset-right));
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: 12px;
@@ -148,5 +150,15 @@ button:disabled {
   color: var(--danger);
   font-size: 0.8rem;
   margin: 0;
+}
+@media (max-width: 400px) {
+  .card {
+    padding: 1.35rem 1rem;
+    padding-left: max(1rem, env(safe-area-inset-left));
+    padding-right: max(1rem, env(safe-area-inset-right));
+  }
+  .header h1 {
+    font-size: 1.05rem;
+  }
 }
 </style>

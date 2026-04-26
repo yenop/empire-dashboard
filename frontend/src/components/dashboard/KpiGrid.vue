@@ -18,7 +18,7 @@ defineProps({
 <style scoped>
 .kpi-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 130px), 1fr));
   gap: 0.75rem;
   margin-bottom: 1.25rem;
 }

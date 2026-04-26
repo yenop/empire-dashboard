@@ -1,6 +1,17 @@
 <template>
   <header class="topbar">
-    <h1 class="title">{{ pageTitle }}</h1>
+    <div class="title-row">
+      <button
+        v-if="shellNav"
+        type="button"
+        class="menu-btn"
+        aria-label="Ouvrir le menu"
+        @click="shellNav.toggleNav()"
+      >
+        <span class="menu-icon" aria-hidden="true" />
+      </button>
+      <h1 class="title">{{ pageTitle }}</h1>
+    </div>
     <div class="right">
       <div class="pills" v-if="activeAgents.length">
         <div v-for="a in activeAgents" :key="a.id" class="pill" :title="a.name">
@@ -8,16 +19,20 @@
           <span class="dot" :style="dotStyle" />
         </div>
       </div>
-      <button type="button" class="btn-new" @click="noop">+ Nouvelle app</button>
+      <button type="button" class="btn-new" aria-label="Nouvelle app" @click="noop">
+        <span class="btn-new-full">+ Nouvelle app</span>
+        <span class="btn-new-short" aria-hidden="true">+ App</span>
+      </button>
     </div>
   </header>
 </template>
 
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, inject, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import api from '@/api'
 
+const shellNav = inject('shellNav', null)
 const route = useRoute()
 const pageTitle = computed(
   () => route.meta.title || 'Dashboard'
@@ -62,10 +77,47 @@ watch(
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.65rem 0.75rem;
   padding: 0.9rem 1.5rem;
+  padding-left: max(1.5rem, env(safe-area-inset-left));
+  padding-right: max(1.5rem, env(safe-area-inset-right));
   border-bottom: 1px solid var(--border);
   background: rgba(5, 5, 15, 0.5);
   backdrop-filter: blur(6px);
+}
+.title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.menu-btn {
+  display: none;
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text);
+  cursor: pointer;
+}
+.menu-btn:hover {
+  border-color: var(--border-hover);
+  color: var(--accent);
+}
+.menu-icon {
+  display: block;
+  width: 18px;
+  height: 2px;
+  background: currentColor;
+  border-radius: 1px;
+  box-shadow: 0 -6px 0 currentColor, 0 6px 0 currentColor;
 }
 .title {
   font-family: var(--font-mono);
@@ -74,19 +126,46 @@ watch(
   letter-spacing: 0.02em;
   margin: 0;
   color: var(--text);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .right {
   display: flex;
   align-items: center;
-  gap: 1rem;
+  gap: 0.65rem 1rem;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+@media (max-width: 900px) {
+  .menu-btn {
+    display: inline-flex;
+  }
+}
+@media (max-width: 640px) {
+  .topbar {
+    padding: 0.65rem 1rem;
+    padding-left: max(1rem, env(safe-area-inset-left));
+    padding-right: max(1rem, env(safe-area-inset-right));
+  }
+  .title {
+    font-size: 0.95rem;
+  }
 }
 .pills {
   display: flex;
   align-items: center;
   gap: 0.35rem;
   flex-wrap: wrap;
-  max-width: 280px;
+  max-width: min(280px, 42vw);
   justify-content: flex-end;
+}
+@media (max-width: 480px) {
+  .pills {
+    display: none;
+  }
 }
 .pill {
   position: relative;
@@ -121,6 +200,17 @@ watch(
   color: var(--accent);
   cursor: pointer;
   white-space: nowrap;
+}
+.btn-new-short {
+  display: none;
+}
+@media (max-width: 400px) {
+  .btn-new-full {
+    display: none;
+  }
+  .btn-new-short {
+    display: inline;
+  }
 }
 .btn-new:hover {
   background: rgba(245, 158, 11, 0.2);

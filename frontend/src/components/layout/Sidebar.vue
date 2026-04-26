@@ -1,5 +1,5 @@
 <template>
-  <aside class="sidebar">
+  <aside class="sidebar" :class="{ open: navOpen }">
     <div class="brand">
       <div class="logo">APP EMPIRE</div>
       <div class="by">by Nicolas</div>
@@ -15,6 +15,7 @@
         :to="item.to"
         class="nav-link"
         active-class="active"
+        @click="onNavClick"
       >
         <span>{{ item.label }}</span>
         <span v-if="item.badge" class="badge">{{ item.badge }}</span>
@@ -30,14 +31,22 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, inject } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+
+const shellNav = inject('shellNav', null)
+const navOpen = computed(() => Boolean(shellNav?.navOpen?.value))
 
 const router = useRouter()
 const auth = useAuthStore()
 
+function onNavClick() {
+  shellNav?.closeNav?.()
+}
+
 function logout() {
+  shellNav?.closeNav?.()
   auth.logout()
   router.push({ name: 'login' })
 }
@@ -186,5 +195,26 @@ const progress = computed(() => Math.min(100, (mrrCurrent / 10000) * 100))
 .logout:hover {
   color: var(--danger);
   border-color: #f43f5e44;
+}
+
+@media (max-width: 900px) {
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: min(280px, 88vw);
+    z-index: 101;
+    min-height: 100dvh;
+    padding-top: max(1.25rem, env(safe-area-inset-top));
+    padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+    box-shadow: 8px 0 32px rgba(0, 0, 0, 0.45);
+    transform: translateX(-100%);
+    transition: transform 0.2s ease;
+    border-right: 1px solid var(--border);
+  }
+  .sidebar.open {
+    transform: translateX(0);
+  }
 }
 </style>

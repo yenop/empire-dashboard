@@ -52,7 +52,7 @@ defineProps({
   display: flex;
   flex-direction: column;
   gap: 0.65rem;
-  max-height: 360px;
+  max-height: min(360px, 45vh);
   overflow: auto;
 }
 .line {

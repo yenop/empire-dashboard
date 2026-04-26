@@ -165,6 +165,27 @@ onMounted(async () => {
   max-height: 70vh;
   overflow: auto;
 }
+@media (max-width: 720px) {
+  .agents {
+    flex-direction: row;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    max-height: none;
+    padding-bottom: 0.35rem;
+    gap: 0.35rem;
+    -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x proximity;
+  }
+  .ag-btn {
+    flex: 0 0 auto;
+    white-space: nowrap;
+    scroll-snap-align: start;
+  }
+  .ta {
+    min-height: 220px;
+  }
+}
 .ag-btn {
   display: flex;
   align-items: center;

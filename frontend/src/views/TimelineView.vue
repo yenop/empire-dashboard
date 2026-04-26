@@ -322,12 +322,25 @@ onMounted(load)
 }
 .cron-list li {
   display: grid;
-  grid-template-columns: 8.5rem 1fr auto;
+  grid-template-columns: minmax(0, 8.5rem) minmax(0, 1fr) auto;
   gap: 0.5rem;
   align-items: baseline;
   font-size: 0.75rem;
   border-bottom: 1px solid #ffffff08;
   padding-bottom: 0.35rem;
+}
+@media (max-width: 560px) {
+  .cron-list li {
+    grid-template-columns: 1fr;
+    align-items: start;
+    gap: 0.25rem;
+  }
+  .cron-list code {
+    word-break: break-word;
+  }
+  .cron-phase {
+    justify-self: start;
+  }
 }
 .cron-list code {
   font-family: var(--font-mono);
