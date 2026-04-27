@@ -1,139 +1,128 @@
-"""Supervision OpenClaw : lecture des fichiers cron (volume monté), sans appel HTTP au gateway."""
+import json
+import os
+from pathlib import Path
 
-from __future__ import annotations
-
-from typing import Any
-
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import JSONResponse
 
 from app.config import get_settings
 from app.deps import get_current_username
-from app.services import openclaw_cron as oc
 
 router = APIRouter(prefix="/api/supervision", tags=["supervision"])
 
+AGENTS_MAP = {
+    "marlene":     {"jobId": "fdfb0543-81a7-4eb7-86c7-9eaf7b1f5378", "name": "Marlène",  "role": "Head of Research",  "pole": "Recherche"},
+    "gaston":      {"jobId": "TON_ID_GASTON",                         "name": "Gaston",   "role": "SEO Analyst",        "pole": "Recherche"},
+    "marcel_x":    {"jobId": "5d4ed714-2ba8-40be-becb-fa4670b92f97", "name": "Marcel",   "role": "Veille X Ecom",      "pole": "Intelligence"},
+    "marcel_yt":   {"jobId": "d415271f-e72c-4986-8b3c-f5d57615a8e6", "name": "Marcel",   "role": "Veille YouTube",     "pole": "Intelligence"},
+    "edith_intel": {"jobId": "3e203c26-b452-47fc-b8fb-ff0c2df2bb41", "name": "Édith",    "role": "Synthèse Intel",     "pole": "Intelligence"},
+    "edith_pod":   {"jobId": "5782f709-a956-4326-aa89-cf0f827b747b", "name": "Édith",    "role": "Veille POD X",       "pole": "Intelligence"},
+    "yvon":        {"jobId": "2b2ba93c-032b-4ff1-aed7-e3f1593cd952", "name": "Yvon",     "role": "Chief of Staff",     "pole": "Orchestration"},
+}
 
-@router.get("/openclaw")
-def openclaw_status(_username: str = Depends(get_current_username)) -> dict[str, Any]:
-    """Statut global issu de cron/jobs.json (compte jobs + dernier statut connu)."""
-    root = oc.oc_root()
-    settings = get_settings()
-    if not root.exists() or not root.is_dir():
-        return {
-            "configured": False,
-            "source": "filesystem",
-            "message": "OPENCLAW_DIR absente ou non montée. Montez le répertoire host OpenClaw (ex. /home/ubuntu/.openclaw) en :ro.",
-            "openclaw_dir": str(settings.openclaw_dir),
-        }
-    jobs = oc.load_jobs_list(root)
-    by_last: dict[str, int] = {"ok": 0, "error": 0, "other": 0}
-    for rec in jobs:
-        lrs = rec.get("lastRunStatus") or rec.get("last_run_status")
-        s = (str(lrs) if lrs is not None else "").lower()
-        if s in ("ok", "success", "succeeded", "done"):
-            by_last["ok"] = by_last.get("ok", 0) + 1
-        elif s in ("error", "failed", "failure"):
-            by_last["error"] = by_last.get("error", 0) + 1
-        elif s:
-            by_last["other"] = by_last.get("other", 0) + 1
 
-    if not jobs:
-        return {
-            "configured": True,
-            "source": "filesystem",
-            "openclaw_dir": str(settings.openclaw_dir),
-            "directory_exists": True,
-            "jobs_file": False,
-            "jobs_in_file": 0,
-            "jobs_enabled": 0,
-            "last_run_status_counts": by_last,
-            "message": "Aucun cron dans cron/jobs.json (fichier absent ou vide).",
-        }
+def _read_jobs(openclaw_dir: str) -> list[dict]:
+    jobs_file = Path(openclaw_dir) / "cron/jobs.json"
+    if not jobs_file.exists():
+        return []
+    try:
+        return json.loads(jobs_file.read_text())["jobs"]
+    except Exception:
+        return []
 
-    en_count = sum(1 for rec in jobs if oc.is_job_enabled(rec))
-    return {
-        "configured": True,
-        "source": "filesystem",
-        "openclaw_dir": str(settings.openclaw_dir),
-        "directory_exists": True,
-        "jobs_file": True,
-        "jobs_in_file": len(jobs),
-        "jobs_enabled": en_count,
-        "last_run_status_counts": by_last,
-    }
+
+def _read_last_runs(openclaw_dir: str, job_id: str, n: int = 5) -> list[dict]:
+    runs_file = Path(openclaw_dir) / f"cron/runs/{job_id}.jsonl"
+    if not runs_file.exists():
+        return []
+    lines = []
+    try:
+        for line in runs_file.read_text().splitlines():
+            line = line.strip()
+            if line:
+                try:
+                    lines.append(json.loads(line))
+                except Exception:
+                    pass
+    except Exception:
+        pass
+    return lines[-n:]
 
 
 @router.get("/openclaw/agents")
-def openclaw_agents(_username: str = Depends(get_current_username)) -> dict[str, Any]:
-    """Statut + dernier rapport de chaque agent mappé."""
-    root = oc.oc_root()
-    if not root.exists() or not root.is_dir():
-        return {
-            "configured": False,
-            "source": "filesystem",
-            "message": "OPENCLAW_DIR absente ou non montée",
-            "agents": [],
-        }
-    jobs = oc.load_jobs_list(root)
-    agents = [oc.agent_entry(root, s, jobs) for s in oc.AGENTS_MAP]
-    return {
-        "configured": True,
-        "source": "filesystem",
-        "openclaw_dir": str(get_settings().openclaw_dir),
-        "agents": agents,
-    }
+async def openclaw_agents(_username: str = Depends(get_current_username)):
+    settings = get_settings()
+    openclaw_dir = getattr(settings, "openclaw_dir", "/openclaw-data")
+
+    jobs = _read_jobs(openclaw_dir)
+    jobs_by_id = {j["id"]: j for j in jobs}
+
+    result = []
+    for key, agent in AGENTS_MAP.items():
+        job_id = agent["jobId"]
+        job = jobs_by_id.get(job_id, {})
+        state = job.get("state", {})
+        runs = _read_last_runs(openclaw_dir, job_id, 5)
+        last_run = runs[-1] if runs else None
+
+        result.append({
+            "key": key,
+            "name": agent["name"],
+            "role": agent["role"],
+            "pole": agent["pole"],
+            "jobId": job_id,
+            "enabled": job.get("enabled", False),
+            "schedule": job.get("schedule", {}).get("expr"),
+            "status": state.get("lastRunStatus", "idle"),
+            "consecutiveErrors": state.get("consecutiveErrors", 0),
+            "lastError": state.get("lastError"),
+            "lastRunAt": state.get("lastRunAtMs"),
+            "nextRunAt": state.get("nextRunAtMs"),
+            "lastDurationMs": state.get("lastDurationMs"),
+            "lastSummary": last_run.get("summary") if last_run else None,
+            "lastModel": last_run.get("model") if last_run else None,
+            "lastTokens": last_run.get("usage") if last_run else None,
+            "recentRuns": [
+                {
+                    "ts": r.get("ts"),
+                    "status": r.get("status"),
+                    "durationMs": r.get("durationMs"),
+                    "tokens": r.get("usage", {}).get("total_tokens") if r.get("usage") else None,
+                    "summaryPreview": (r.get("summary") or "")[:200],
+                }
+                for r in runs
+            ],
+        })
+
+    return {"ok": True, "agents": result}
 
 
 @router.get("/openclaw/agents/{job_id}/report")
-def openclaw_agent_report(
-    job_id: str, _username: str = Depends(get_current_username)
-) -> dict[str, Any]:
-    """Dernier rapport + historique des runs (fichier .jsonl)."""
-    root = oc.oc_root()
-    jid = oc.norm_uuid(job_id)
-    if not jid:
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST,
-            detail="job_id invalide ou non configuré (Gaston : id à renseigner dans AGENTS_MAP)",
-        )
-    if not root.exists() or not root.is_dir():
-        raise HTTPException(
-            status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="OPENCLAW_DIR absente",
-        )
-    spec = oc.spec_for_job_id(jid)
-    path = root / "cron" / "runs" / f"{jid}.jsonl"
-    if not path.is_file():
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Aucun fichier de runs pour ce job")
-    if spec is None:
-        spec = {
-            "key": "unknown",
-            "name": "OpenClaw",
-            "label": f"Job {jid[:8]}…",
-        }
-    all_runs = oc.parse_jsonl(path)
-    runs: list[dict[str, Any]] = []
-    for r in reversed(all_runs):
-        u = r.get("usage")
-        if not isinstance(u, dict):
-            u = {}
-        runs.append(
-            {
-                "ts": r.get("ts") or r.get("time"),
-                "status": oc.run_status(r),
-                "summary": r.get("summary") or r.get("message") or "",
-                "usage": u,
-                "tokens": oc.usage_tokens(u),
-                "model": r.get("model"),
-                "durationMs": r.get("durationMs") or r.get("duration_ms"),
-            }
-        )
-    latest = runs[0] if runs else None
+async def openclaw_agent_report(
+    job_id: str,
+    _username: str = Depends(get_current_username),
+):
+    settings = get_settings()
+    openclaw_dir = getattr(settings, "openclaw_dir", "/openclaw-data")
+    runs = _read_last_runs(openclaw_dir, job_id, 1)
+    if not runs:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Aucun run trouvé")
+    return {"ok": True, "report": runs[-1]}
+
+
+@router.get("/openclaw")
+async def openclaw_status(_username: str = Depends(get_current_username)):
+    settings = get_settings()
+    openclaw_dir = getattr(settings, "openclaw_dir", "/openclaw-data")
+    jobs = _read_jobs(openclaw_dir)
+    ok_count = sum(1 for j in jobs if j.get("state", {}).get("lastRunStatus") == "ok")
+    error_count = sum(1 for j in jobs if j.get("state", {}).get("consecutiveErrors", 0) > 0)
     return {
-        "jobId": jid,
-        "key": spec.get("key"),
-        "name": spec.get("name"),
-        "label": spec.get("label"),
-        "latest": latest,
-        "runs": runs,
+        "configured": True,
+        "source": "file",
+        "openclaw_dir": openclaw_dir,
+        "total_jobs": len(jobs),
+        "ok": ok_count,
+        "errors": error_count,
     }
