@@ -25,9 +25,7 @@ class Settings(BaseSettings):
 
     openclaw_gateway_url: str = ""
     openclaw_gateway_token: str = ""
-    # Répertoire monté en lecture (fichiers cron OpenClaw : jobs.json, runs/*.jsonl)
     openclaw_dir: str = "/openclaw-data"
-
     @property
     def database_url(self) -> str:
         return (

@@ -28,7 +28,7 @@ services:
       MINIO_BUCKET: empire
       OPENCLAW_DIR: /openclaw-data
     volumes:
-      - ${OPENCLAW_HOST_PATH:-.docker-openclaw}:/openclaw-data:ro
+      - /home/ubuntu/.openclaw:/openclaw-data:ro
     depends_on:
       mariadb:
         condition: service_healthy
