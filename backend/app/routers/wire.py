@@ -6,7 +6,8 @@ from app.database import get_db
 from app.deps import get_current_username
 from app.models import WireConversationModel, WireMessageModel
 from app.services import openclaw_cron as oc
-
+from pydantic import BaseModel
+from app.config import get_settings
 router = APIRouter(prefix="/api/wire", tags=["wire"])
 
 
@@ -105,3 +106,45 @@ def list_messages(
         }
         for m in msgs
     ]
+
+
+
+class WireWebhookPayload(BaseModel):
+    conversation_title: str
+    from_agent_id: str
+    to_agent_id: str | None = None
+    body: str
+    secret: str
+
+@router.post("/webhook")
+def wire_webhook(
+    payload: WireWebhookPayload,
+    db: Session = Depends(get_db),
+) -> dict:
+    # Vérification secret basique
+    settings = get_settings()
+    if payload.secret != settings.empire_jwt_secret:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, detail="Invalid secret")
+
+    # Trouver ou créer la conversation du jour
+    from datetime import date
+    today_title = f"{payload.conversation_title} — {date.today().isoformat()}"
+    conv = db.scalars(
+        select(WireConversationModel)
+        .where(WireConversationModel.title == today_title)
+    ).first()
+
+    if not conv:
+        conv = WireConversationModel(title=today_title)
+        db.add(conv)
+        db.flush()
+
+    msg = WireMessageModel(
+        conversation_id=conv.id,
+        from_agent_id=payload.from_agent_id,
+        to_agent_id=payload.to_agent_id,
+        body=payload.body,
+    )
+    db.add(msg)
+    db.commit()
+    return {"ok": True, "conversation_id": conv.id, "message_id": msg.id}
