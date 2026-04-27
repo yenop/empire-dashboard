@@ -22,8 +22,6 @@ from app.models import (
     TaskModel,
     TaskPriority,
     TaskStatus,
-    WireConversationModel,
-    WireMessageModel,
     WorkflowStateModel,
 )
 
@@ -263,129 +261,6 @@ def seed_empire_extensions(db: Session) -> None:
         for ag in db.scalars(select(AgentModel)).all():
             for slug, content in _nerve_md(ag.id, ag.name, ag.role, ag.pole).items():
                 db.add(NerveFileModel(agent_id=ag.id, slug=slug, content=content))
-        db.commit()
-
-    n_wire = db.scalar(select(func.count()).select_from(WireConversationModel)) or 0
-    if n_wire == 0:
-        scenarios: list[tuple[str, list[tuple[str | None, str | None, str]]]] = [
-            (
-                "Marlène → Gaston · scoring « gourde isotherme trail »",
-                [
-                    ("marlene", "gaston", "Niche détectée : gourde isotherme trail ultra-léger. Volume Trends OK."),
-                    ("gaston", "marlene", "KD modéré sur 'insulated running bottle'. Gap ASO sur 2 longues queues."),
-                    ("marlene", "gaston", "Je pousse 5 variantes mots-clés pour fiches Amazon FR."),
-                    ("gaston", "marlene", "Go pour brief Colette si tu valides score > 72."),
-                ],
-            ),
-            (
-                "Hugo ↔ Simone · pipeline page onboarding",
-                [
-                    ("hugo", "simone", "Draft section hero + preuve sociale pour Soia."),
-                    ("simone", "hugo", "Ton CTA trop long sur mobile — compacte à 42 caractères max."),
-                    ("hugo", "simone", "V2 envoyée, j’ai raccourci CTA + ajouté micro-copy sécurité."),
-                ],
-            ),
-            (
-                "Édith → Yvon · synthèse veille POD",
-                [
-                    ("edith", "yvon", "Veille POD X : hausse des mockups 'medical humor' — risque policy store."),
-                    ("yvon", "edith", "Marque la niche 'borderline' et bascule vers angle 'office humor' safe."),
-                ],
-            ),
-            (
-                "Théodore → Colette · setup Shopify headless",
-                [
-                    ("theodore", "colette", "Theme skeleton prêt, webhooks commande branchés sur staging."),
-                    ("colette", "theodore", "Palette alignée branding phase 3 — j’injecte tokens Figma."),
-                ],
-            ),
-            (
-                "Gaston → Marlène · cannibalisation mots-clés",
-                [
-                    ("gaston", "marlene", "Receipt2Go : chevauchement 'quittance' vs 'loyer' — besoin arbitrage."),
-                    ("marlene", "gaston", "On garde 'quittance loyer' comme primaire, 'reçu loyer' en secondaire."),
-                ],
-            ),
-            (
-                "Baptiste → Fernand · rollout distribution",
-                [
-                    ("baptiste", "fernand", "Canal TikTok shop test sur 1 SKU pilote."),
-                    ("fernand", "baptiste", "Logistique printful OK délai 4j — green light créneaux ads."),
-                ],
-            ),
-            (
-                "Raymond → Lucien · macro support",
-                [
-                    ("raymond", "lucien", "Top 3 tickets = export PDF iOS 18 — préparer réponse type."),
-                    ("lucien", "raymond", "Templates prêts + lien doc Notion interne."),
-                ],
-            ),
-            (
-                "Marcel → Édith · trend social e-com",
-                [
-                    ("marcel", "edith", "Thread X viral sur bundles skincare mini — opportunité cross-niche."),
-                    ("edith", "marcel", "Ajouté au digest 22h — score 7/10, à monitorer 48h."),
-                ],
-            ),
-            (
-                "Germaine → Yvon · seuil marge",
-                [
-                    ("germaine", "yvon", "Marge nette cible 22% sur SKU A — en dessous sur ads actuels."),
-                    ("yvon", "germaine", "Réduction budget test -15% jusqu’à nouvelle niche validée."),
-                ],
-            ),
-            (
-                "Colette → Hugo · brief produit",
-                [
-                    ("colette", "hugo", "Fiche SKU : bouteille isotherme 750ml — angles éco + trail."),
-                    ("hugo", "colette", "Première passe bullets + FAQ — dispo dans Content Pipeline."),
-                ],
-            ),
-            (
-                "Yvon → Marlène · priorisation file",
-                [
-                    ("yvon", "marlene", "Phase 1 : focus 3 niches max jusqu’à validation humaine."),
-                    ("marlene", "yvon", "Reçu — je congèle les scores < 65."),
-                ],
-            ),
-            (
-                "Simone → Gaston · QA métadonnées",
-                [
-                    ("simone", "gaston", "Subtitle EN PlayerTrackr : typo + keyword stuffing léger."),
-                    ("gaston", "simone", "Correctif proposé — retire doublon 'stats' x4."),
-                ],
-            ),
-        ]
-        extra_titles = [
-            "Wire · veille concurrent PlayerTrackr",
-            "Wire · demande API Brave Search",
-            "Wire · sync cron Marlène/Gaston",
-        ]
-        for title, msgs in scenarios:
-            c = WireConversationModel(title=title)
-            db.add(c)
-            db.flush()
-            for fa, ta, body in msgs:
-                db.add(
-                    WireMessageModel(
-                        conversation_id=c.id,
-                        from_agent_id=fa,
-                        to_agent_id=ta,
-                        body=body,
-                    )
-                )
-        for t in extra_titles:
-            c = WireConversationModel(title=t)
-            db.add(c)
-            db.flush()
-            db.add(
-                WireMessageModel(
-                    conversation_id=c.id,
-                    from_agent_id="yvon",
-                    to_agent_id="marlene",
-                    body="Ping automatique — alignement phase + prochaine salve niches.",
-                )
-            )
         db.commit()
 
     if not db.scalars(select(NicheCandidateModel).limit(1)).first():

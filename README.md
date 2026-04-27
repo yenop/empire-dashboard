@@ -121,3 +121,12 @@ nextly.ovh (51.178.52.121)
 │
 └── empire-dash.nextly.ovh
     └── ❌ 502 → http://localhost:8008 + :3080
+
+
+    # 1. Rebuild empire-dashboard
+cd /home/ubuntu/.openclaw/workspace/empire-dashboard
+docker compose down && docker compose up -d --build
+
+# 2. Rebuild orchestrator_nginx
+cd /home/ubuntu/.openclaw/workspace/orchestratorTrendTiktok
+docker compose up -d --build nginx

@@ -1,9 +1,15 @@
 <template>
   <div class="wire">
+    <AgentsWire />
     <header class="head">
       <h2 class="h2">Wire — communications inter-agents</h2>
       <p class="sub">
-        Canal autonome Marlène ↔ Gaston ↔ équipe. {{ total }} fils — observation sans intervention.
+        <template v-if="wireSource === 'openclaw'">
+          Fils = runs OpenClaw (cron/runs/*.jsonl), un fil par agent. {{ total }} fils — dernière activité en tête.
+        </template>
+        <template v-else>
+          Canal autonome Marlène ↔ Gaston ↔ équipe. {{ total }} fils — observation sans intervention.
+        </template>
       </p>
     </header>
     <div v-if="loading" class="muted">Chargement…</div>
@@ -28,11 +34,12 @@
         <template v-else>
           <div v-if="msgLoading" class="muted">Messages…</div>
           <div v-else class="msgs">
-            <article v-for="m in messages" :key="m.id" class="msg">
+            <article v-for="m in messages" :key="String(m.id)" class="msg">
               <div class="msg-head">
                 <span class="from">{{ labelAgent(m.from_agent_id) }}</span>
                 <span class="arrow">→</span>
                 <span class="to">{{ labelAgent(m.to_agent_id) }}</span>
+                <span v-if="m.meta" class="meta-run">{{ m.meta.status }}{{ m.meta.tokens != null ? ' · ' + m.meta.tokens + ' tok' : '' }}</span>
                 <time>{{ m.created_at }}</time>
               </div>
               <p class="body">{{ m.body }}</p>
@@ -47,18 +54,21 @@
 <script setup>
 import { onMounted, ref } from 'vue'
 import api from '@/api'
+import AgentsWire from '@/components/AgentsWire.vue'
 
 const loading = ref(true)
 const msgLoading = ref(false)
 const err = ref('')
 const conversations = ref([])
 const total = ref(0)
+const wireSource = ref('database')
 const activeId = ref(null)
 const messages = ref([])
 const agentsById = ref({})
 
 function labelAgent(id) {
   if (!id) return '—'
+  if (id === 'dashboard') return 'Dashboard'
   const a = agentsById.value[id]
   return a ? `${a.emoji} ${a.name}` : id
 }
@@ -73,6 +83,7 @@ async function loadConversations() {
     ])
     conversations.value = w.data.items || []
     total.value = w.data.total || 0
+    wireSource.value = w.data.source || 'database'
     const m = {}
     for (const a of ag.data || []) m[a.id] = a
     agentsById.value = m
@@ -91,7 +102,9 @@ async function openConv(id) {
   msgLoading.value = true
   messages.value = []
   try {
-    const { data } = await api.get(`/api/wire/conversations/${id}/messages`)
+    const { data } = await api.get(
+      `/api/wire/conversations/${encodeURIComponent(id)}/messages`
+    )
     messages.value = data || []
   } catch {
     messages.value = []
@@ -223,7 +236,7 @@ onMounted(loadConversations)
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.35rem;
+  gap: 0.35rem 0.35rem;
   font-size: 0.72rem;
   font-family: var(--font-mono);
   margin-bottom: 0.35rem;
@@ -232,6 +245,16 @@ onMounted(loadConversations)
   margin-left: auto;
   color: var(--text-muted);
   font-size: 0.65rem;
+}
+.meta-run {
+  width: 100%;
+  font-size: 0.6rem;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  opacity: 0.9;
+  margin-top: 0.15rem;
+  padding-left: 0;
+  flex-basis: 100%;
 }
 .from {
   color: var(--accent);

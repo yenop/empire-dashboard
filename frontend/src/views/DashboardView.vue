@@ -9,8 +9,20 @@
     <KpiGrid :items="kpiItems" />
     <div class="openclaw" v-if="oc">
       <span class="oc-label">OpenClaw</span>
-      <span v-if="!oc.configured" class="oc-off">Non configuré</span>
-      <span v-else class="oc-on">Gateway connecté</span>
+      <span v-if="!oc.configured" class="oc-off">Non monté (volume)</span>
+      <span v-else class="oc-on"
+        >{{ oc.source === 'filesystem' ? 'Fichiers cron' : 'OK' }} ·
+        <template v-if="oc.jobs_in_file != null">{{ oc.jobs_in_file }} crons</template
+        >
+        <template v-if="oc.jobs_file === false && oc.message"> — {{ oc.message }}</template>
+        <template v-else-if="oc.last_run_status_counts">
+          ·
+          <span v-if="oc.last_run_status_counts.ok != null">✓{{ oc.last_run_status_counts.ok }}</span>
+          <span v-if="(oc.last_run_status_counts.error || 0) > 0" class="oc-err"
+            > · ✗{{ oc.last_run_status_counts.error }}</span
+          >
+        </template>
+      </span>
     </div>
     <div class="row-panels">
       <AppList :apps="data.apps" />
@@ -116,5 +128,8 @@ onMounted(async () => {
 }
 .oc-on {
   color: var(--success);
+}
+.oc-err {
+  color: #f87171;
 }
 </style>

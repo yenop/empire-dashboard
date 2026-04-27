@@ -26,6 +26,9 @@ services:
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minio}
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minio_secret_change}
       MINIO_BUCKET: empire
+      OPENCLAW_DIR: /openclaw-data
+    volumes:
+      - ${OPENCLAW_HOST_PATH:-.docker-openclaw}:/openclaw-data:ro
     depends_on:
       mariadb:
         condition: service_healthy
