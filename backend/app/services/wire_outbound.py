@@ -23,16 +23,33 @@ def append_nerve_note(
     db: Session,
     agent_id: str,
     note: str,
+    *,
+    message_id: int | None = None,
+    human_status: str = "sent",
     settings: Settings | None = None,
 ) -> tuple[bool, str | None]:
     """
     Append a dated block to HEARTBEAT. Returns (ok, error_detail).
     If workspace path is missing in filesystem mode, returns (False, reason) without raising.
+
+    Uses FEEDBACK:* lines so OpenClaw crons can parse status without changing file layout.
     """
     s = settings or get_settings()
     slug = "heartbeat"
-    ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-    block = f"\n\n---\n**Dashboard Wire** ({ts})\n{note.strip()}\n"
+    status_prefix = {
+        "approved": "FEEDBACK:APPROVED",
+        "rework": "FEEDBACK:REWORK",
+        "sent": "FEEDBACK:INFO",
+    }.get(human_status, "FEEDBACK:INFO")
+    timestamp = datetime.now(timezone.utc).isoformat()
+    block = f"""
+
+--- {timestamp} ---
+{status_prefix}
+message_id: {message_id if message_id is not None else "n/a"}
+{note.strip()}
+---
+"""
     if nerve_storage_mode() == "filesystem":
         try:
             cur = nf.read_nerve_file(agent_id, slug, s)

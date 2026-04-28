@@ -10,7 +10,11 @@ from slowapi.middleware import SlowAPIMiddleware
 
 from app import models  # noqa: F401
 from app.database import Base, SessionLocal, engine
-from app.db_schema import ensure_intel_pipeline_schema, ensure_wire_conversations_openclaw_column
+from app.db_schema import (
+    ensure_intel_pipeline_schema,
+    ensure_wire_conversations_openclaw_column,
+    ensure_wire_message_status_columns,
+)
 from app.limiter import limiter
 from app.routers import (
     agents,
@@ -56,6 +60,7 @@ async def _deliverable_checker_loop() -> None:
 async def lifespan(_app: FastAPI):
     Base.metadata.create_all(bind=engine)
     ensure_wire_conversations_openclaw_column()
+    ensure_wire_message_status_columns()
     ensure_intel_pipeline_schema()
     with SessionLocal() as db:
         seed_if_empty(db)

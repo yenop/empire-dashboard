@@ -243,6 +243,14 @@ class NerveFileModel(Base):
     )
 
 
+class WireMessageStatus(str, enum.Enum):
+    sent = "sent"
+    approved = "approved"
+    rework = "rework"
+    ack = "ack"
+    applied = "applied"
+
+
 class WireConversationModel(Base):
     __tablename__ = "wire_conversations"
 
@@ -272,6 +280,12 @@ class WireMessageModel(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.current_timestamp()
     )
+    human_status: Mapped[WireMessageStatus] = mapped_column(
+        Enum(WireMessageStatus, native_enum=False, length=20),
+        default=WireMessageStatus.sent,
+    )
+    ack_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    applied_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     conversation: Mapped["WireConversationModel"] = relationship(
         back_populates="messages"

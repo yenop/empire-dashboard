@@ -34,6 +34,7 @@
         <template v-else>
           <div v-if="msgLoading" class="muted">Messages…</div>
           <div v-else class="msgs">
+            <p v-if="statusErr" class="err status-err">{{ statusErr }}</p>
             <article v-for="m in messages" :key="String(m.id)" class="msg">
               <div class="msg-head">
                 <span v-if="m.source === 'dashboard'" class="src-badge" title="Message depuis le dashboard"
@@ -49,6 +50,28 @@
                 >{{ formatWireDate(m.created_at) }}</time>
               </div>
               <p class="body">{{ m.body }}</p>
+              <div v-if="isDashboardHumanMsg(m)" class="feedback-controls">
+                <button
+                  v-if="(m.human_status || 'sent') === 'sent'"
+                  type="button"
+                  class="btn-approve"
+                  @click="setMessageStatus(m, 'approved')"
+                >
+                  Approuver
+                </button>
+                <button
+                  v-if="(m.human_status || 'sent') === 'sent'"
+                  type="button"
+                  class="btn-rework"
+                  @click="setMessageStatus(m, 'rework')"
+                >
+                  À retravailler
+                </button>
+                <span
+                  class="loop-status"
+                  :class="m.human_status || 'sent'"
+                >{{ loopLabel(m.human_status || 'sent') }}</span>
+              </div>
             </article>
           </div>
           <footer v-if="!msgLoading" class="composer">
@@ -112,6 +135,7 @@ const toAgentId = ref('')
 const pushNerve = ref(true)
 const sending = ref(false)
 const sendErr = ref('')
+const statusErr = ref('')
 
 const wireDateFmt = new Intl.DateTimeFormat('fr-FR', {
   dateStyle: 'long',
@@ -136,6 +160,44 @@ function labelAgent(id) {
   if (id === 'dashboard') return 'Dashboard'
   const a = agentsById.value[id]
   return a ? `${a.emoji} ${a.name}` : id
+}
+
+function wireMessageNumericId(m) {
+  if (typeof m.id === 'number') return m.id
+  const s = String(m.id)
+  if (s.startsWith('db-')) {
+    const n = parseInt(s.slice(3), 10)
+    return Number.isNaN(n) ? null : n
+  }
+  return null
+}
+
+function isDashboardHumanMsg(m) {
+  return m.from_agent_id === 'dashboard' && wireMessageNumericId(m) != null
+}
+
+function loopLabel(status) {
+  return (
+    {
+      sent: '— envoyé',
+      approved: '✓ approuvé',
+      rework: '↻ retravailler',
+      ack: "○ vu par l'agent",
+      applied: '✓ appliqué',
+    }[status] ?? status
+  )
+}
+
+async function setMessageStatus(m, st) {
+  const numId = wireMessageNumericId(m)
+  if (numId == null) return
+  statusErr.value = ''
+  try {
+    await api.patch(`/api/wire/messages/${numId}/status`, { status: st, note: '' })
+    await openConv(activeId.value)
+  } catch (e) {
+    statusErr.value = e.response?.data?.detail || 'Mise à jour impossible.'
+  }
 }
 
 async function loadConversations() {
@@ -168,6 +230,7 @@ async function openConv(id) {
   msgLoading.value = true
   messages.value = []
   sendErr.value = ''
+  statusErr.value = ''
   try {
     const { data } = await api.get(
       `/api/wire/conversations/${encodeURIComponent(id)}/messages`
@@ -453,5 +516,52 @@ onMounted(loadConversations)
 .send:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+.status-err {
+  margin: 0 0 0.75rem;
+}
+.feedback-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+.btn-approve,
+.btn-rework {
+  font: inherit;
+  font-size: 0.7rem;
+  padding: 0.35rem 0.6rem;
+  border-radius: 6px;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--bg, #0a0a0a);
+  color: inherit;
+}
+.btn-approve {
+  border-color: #22c55e55;
+  background: rgba(34, 197, 94, 0.1);
+}
+.btn-rework {
+  border-color: #f9731655;
+  background: rgba(249, 115, 22, 0.1);
+}
+.loop-status {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  color: var(--text-muted);
+}
+.loop-status.sent {
+  opacity: 0.85;
+}
+.loop-status.approved,
+.loop-status.applied {
+  color: #4ade80;
+}
+.loop-status.rework {
+  color: #fb923c;
+}
+.loop-status.ack {
+  color: var(--info);
 }
 </style>

@@ -5,6 +5,27 @@ from sqlalchemy import inspect, text
 from app.database import engine
 
 
+def ensure_wire_message_status_columns() -> None:
+    """Human feedback loop: human_status, ack_at, applied_at on wire_messages."""
+    insp = inspect(engine)
+    if not insp.has_table("wire_messages"):
+        return
+    cols = {c["name"] for c in insp.get_columns("wire_messages")}
+    with engine.begin() as conn:
+        if "human_status" not in cols:
+            _run_ignore(
+                conn,
+                "ALTER TABLE wire_messages ADD COLUMN human_status "
+                "VARCHAR(20) NOT NULL DEFAULT 'sent'",
+            )
+        if "ack_at" not in cols:
+            _run_ignore(conn, "ALTER TABLE wire_messages ADD COLUMN ack_at DATETIME")
+        if "applied_at" not in cols:
+            _run_ignore(
+                conn, "ALTER TABLE wire_messages ADD COLUMN applied_at DATETIME"
+            )
+
+
 def ensure_wire_conversations_openclaw_column() -> None:
     """Add openclaw_job_id to wire_conversations if missing."""
     insp = inspect(engine)
