@@ -3,6 +3,7 @@ from datetime import datetime
 from decimal import Decimal
 
 from sqlalchemy import (
+    Boolean,
     DateTime,
     Enum,
     ForeignKey,
@@ -10,6 +11,7 @@ from sqlalchemy import (
     Numeric,
     String,
     Text,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -167,6 +169,23 @@ class WorkflowStateModel(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
     phase: Mapped[int] = mapped_column(Integer, default=1)
     last_validated_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class PhaseDeliverableModel(Base):
+    """Checklist items per phase; blocks advance until required rows are checked."""
+
+    __tablename__ = "phase_deliverables"
+    __table_args__ = (
+        UniqueConstraint("phase", "key", name="uq_phase_deliverable_phase_key"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    phase: Mapped[int] = mapped_column(Integer, nullable=False)
+    key: Mapped[str] = mapped_column(String(100), nullable=False)
+    label: Mapped[str] = mapped_column(String(255), nullable=False)
+    required: Mapped[bool] = mapped_column(Boolean, default=True)
+    checked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    checked_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
 
 class NerveFileModel(Base):

@@ -16,10 +16,15 @@
         <button
           type="button"
           class="btn-primary"
-          :disabled="wf.phase >= 10 || busy"
+          :disabled="wf.phase >= 10 || busy || !canAdvance"
+          :title="
+            wf.phase >= 10 || canAdvance
+              ? ''
+              : 'Complète tous les livrables requis de la phase courante'
+          "
           @click="advance"
         >
-          Valider & avancer
+          Valider &amp; avancer →
         </button>
         <button type="button" class="btn-ghost" :disabled="busy" @click="resetWf">Réinitialiser phase 1</button>
       </div>
@@ -29,6 +34,36 @@
       <div class="accent" />
       <div class="cur-title">En cours — {{ wf.current.title }}</div>
       <p class="cur-sum">{{ wf.current.summary }}</p>
+
+      <div class="deliverables-gate">
+        <div class="gate-title">Livrables phase {{ wf.phase }}</div>
+        <div
+          v-for="item in deliverables"
+          :key="item.key"
+          class="deliverable-row"
+        >
+          <span
+            class="check-icon"
+            :class="item.checked_at ? 'done' : 'pending'"
+          >
+            {{ item.checked_at ? '✓' : '○' }}
+          </span>
+          <span class="deliverable-label">{{ item.label }}</span>
+          <button
+            v-if="!item.auto_check && !item.checked_at"
+            type="button"
+            class="check-btn"
+            :disabled="busy"
+            @click="checkDeliverable(item.key)"
+          >
+            Valider
+          </button>
+          <span v-if="item.checked_at" class="auto-label">
+            {{ item.checked_by === 'auto' ? 'auto' : 'validé' }}
+          </span>
+        </div>
+      </div>
+
       <div class="chips">
         <span
           v-for="aid in wf.current.agents"
@@ -71,7 +106,7 @@
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import api from '@/api'
 
 const loading = ref(true)
@@ -86,6 +121,11 @@ const wf = ref({
 })
 const agentsById = ref({})
 const crons = ref([])
+const deliverables = ref([])
+
+const canAdvance = computed(() =>
+  deliverables.value.filter((d) => d.required).every((d) => d.checked_at != null),
+)
 
 function agentEmoji(id) {
   return agentsById.value[id]?.emoji || '·'
@@ -98,6 +138,15 @@ function chipStyle(id) {
   return c ? { borderColor: `${c}55`, color: c } : {}
 }
 
+async function fetchDeliverables() {
+  try {
+    const { data } = await api.get('/api/workflow/deliverables')
+    deliverables.value = data || []
+  } catch {
+    deliverables.value = []
+  }
+}
+
 async function load() {
   loading.value = true
   err.value = ''
@@ -106,6 +155,7 @@ async function load() {
       api.get('/api/workflow'),
       api.get('/api/agents'),
       api.get('/api/ops/crons'),
+      fetchDeliverables(),
     ])
     wf.value = w.data
     crons.value = cr.data || []
@@ -119,11 +169,26 @@ async function load() {
   }
 }
 
+async function checkDeliverable(key) {
+  busy.value = true
+  try {
+    await api.patch(`/api/workflow/deliverables/${encodeURIComponent(key)}/check`)
+    await fetchDeliverables()
+    err.value = ''
+  } catch (e) {
+    err.value = e.response?.data?.detail || e.message
+  } finally {
+    busy.value = false
+  }
+}
+
 async function advance() {
   busy.value = true
   try {
     const { data } = await api.post('/api/workflow/advance')
     wf.value = data
+    await fetchDeliverables()
+    err.value = ''
   } catch (e) {
     err.value = e.response?.data?.detail || e.message
   } finally {
@@ -137,6 +202,7 @@ async function resetWf() {
   try {
     const { data } = await api.post('/api/workflow/reset')
     wf.value = data
+    await fetchDeliverables()
     err.value = ''
   } catch (e) {
     err.value = e.response?.data?.detail || e.message
@@ -242,6 +308,67 @@ onMounted(load)
   font-size: 0.8rem;
   color: var(--text-muted);
   line-height: 1.45;
+}
+.deliverables-gate {
+  margin-bottom: 1rem;
+  padding: 0.75rem;
+  border-radius: 8px;
+  border: 1px solid #ffffff12;
+  background: #00000018;
+}
+.gate-title {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin-bottom: 0.5rem;
+}
+.deliverable-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 0.5rem;
+  align-items: center;
+  font-size: 0.78rem;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid #ffffff08;
+}
+.deliverable-row:last-child {
+  border-bottom: none;
+}
+.check-icon {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  width: 1.25rem;
+  text-align: center;
+}
+.check-icon.done {
+  color: var(--cyan);
+}
+.check-icon.pending {
+  color: var(--text-muted);
+  opacity: 0.7;
+}
+.deliverable-label {
+  line-height: 1.35;
+}
+.check-btn {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+}
+.check-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.auto-label {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  color: var(--text-muted);
 }
 .chips {
   display: flex;

@@ -18,12 +18,14 @@ from app.models import (
     NerveFileModel,
     NicheCandidateModel,
     NicheStatus,
+    PhaseDeliverableModel,
     SeoRankModel,
     TaskModel,
     TaskPriority,
     TaskStatus,
     WorkflowStateModel,
 )
+from app.workflow_phases import PHASES
 
 
 def seed_if_empty(db: Session) -> None:
@@ -247,6 +249,30 @@ def _nerve_md(agent_id: str, name: str, role: str, pole: str) -> dict[str, str]:
     }
 
 
+def ensure_phase_deliverables(db: Session) -> None:
+    """Idempotent: insert phase_deliverables rows from PHASES when missing."""
+    for p in PHASES:
+        phase_idx = int(p["index"])
+        for d in p.get("deliverables") or []:
+            exists = db.scalars(
+                select(PhaseDeliverableModel).where(
+                    PhaseDeliverableModel.phase == phase_idx,
+                    PhaseDeliverableModel.key == str(d["key"]),
+                )
+            ).first()
+            if exists:
+                continue
+            db.add(
+                PhaseDeliverableModel(
+                    phase=phase_idx,
+                    key=str(d["key"]),
+                    label=str(d["label"]),
+                    required=bool(d.get("required", True)),
+                )
+            )
+    db.commit()
+
+
 def seed_empire_extensions(db: Session) -> None:
     """Idempotent : complète workflow, nerve, wire, modules ops si absents."""
     if not db.scalars(select(AgentModel).limit(1)).first():
@@ -324,3 +350,5 @@ def seed_empire_extensions(db: Session) -> None:
                 )
             )
         db.commit()
+
+    ensure_phase_deliverables(db)

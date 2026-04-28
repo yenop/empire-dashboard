@@ -1,3 +1,5 @@
+import asyncio
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -26,7 +28,28 @@ from app.routers import (
     workflow,
 )
 from app.services.minio_client import ensure_bucket
+from app.services.deliverable_checker import auto_check_deliverables
 from app.services.seed import seed_empire_extensions, seed_if_empty
+
+logger = logging.getLogger(__name__)
+
+
+async def _deliverable_checker_loop() -> None:
+    await asyncio.sleep(300)
+    while True:
+        try:
+            from app.models import WorkflowStateModel
+
+            db = SessionLocal()
+            try:
+                st = db.get(WorkflowStateModel, 1)
+                if st:
+                    auto_check_deliverables(db, max(1, min(10, st.phase)))
+            finally:
+                db.close()
+        except Exception:
+            logger.exception("deliverable_checker loop failed")
+        await asyncio.sleep(300)
 
 
 @asynccontextmanager
@@ -36,8 +59,17 @@ async def lifespan(_app: FastAPI):
     with SessionLocal() as db:
         seed_if_empty(db)
         seed_empire_extensions(db)
+        st = db.get(models.WorkflowStateModel, 1)
+        if st:
+            auto_check_deliverables(db, max(1, min(10, st.phase)))
     ensure_bucket()
+    checker_task = asyncio.create_task(_deliverable_checker_loop())
     yield
+    checker_task.cancel()
+    try:
+        await checker_task
+    except asyncio.CancelledError:
+        pass
 
 
 app = FastAPI(title="App Empire API", lifespan=lifespan)
