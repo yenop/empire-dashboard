@@ -23,10 +23,17 @@ AGENTS_MAP: list[dict[str, Any]] = [
     {
         "key": "gaston",
         "dashboard_agent_id": "gaston",
-        "jobId": "",
+        "jobId": "5d62c3e8-cd0d-4dad-a768-227eee28c757",
         "name": "Gaston",
         "label": "Analyse SEO",
         "pole": "recherche",
+    },
+    {
+        "key": "colette",
+        "jobId": "2eef9fda-00e5-4223-80db-8bbadeab0a69",
+        "name": "Colette",
+        "label": "Brief UI/UX",
+        "pole": "production",
     },
     {
         "key": "marcel_x",
