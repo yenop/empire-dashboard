@@ -321,6 +321,7 @@ def build_wire_conversations() -> list[dict[str, Any]] | None:
         body = (last.get("summary") or last.get("message") or "") if last else ""
         preview = (body[:160] + "…") if len(body) > 160 else body
         last_ts = _run_ts(last) if last else ""
+        ak = spec.get("key")
         items.append(
             {
                 "id": jid,
@@ -329,7 +330,12 @@ def build_wire_conversations() -> list[dict[str, Any]] | None:
                 "message_count": len(runs),
                 "preview": preview,
                 "source": "openclaw",
-                "agent_key": spec.get("key"),
+                "agent_key": ak,
+                "last_message_at": last_ts or None,
+                "last_is_broadcast": False,
+                "last_pole": (spec.get("pole") or "orchestration"),
+                "last_from_agent_id": ak,
+                "last_to_agent_id": "dashboard",
             }
         )
 
@@ -344,6 +350,9 @@ def build_wire_conversations() -> list[dict[str, Any]] | None:
             body = (last.get("summary") or last.get("message") or "") if last else ""
             preview = (body[:160] + "…") if len(body) > 160 else body
             last_ts = _run_ts(last) if last else ""
+            ex_spec = spec_for_job_id(nid)
+            ex_pole = (ex_spec or {}).get("pole") or "orchestration"
+            ex_key = (ex_spec or {}).get("key")
             items.append(
                 {
                     "id": nid,
@@ -353,6 +362,11 @@ def build_wire_conversations() -> list[dict[str, Any]] | None:
                     "preview": preview,
                     "source": "openclaw",
                     "agent_key": None,
+                    "last_message_at": last_ts or None,
+                    "last_is_broadcast": False,
+                    "last_pole": ex_pole,
+                    "last_from_agent_id": ex_key,
+                    "last_to_agent_id": "dashboard",
                 }
             )
             known_ids.add(nid)
@@ -402,4 +416,5 @@ def wire_messages_for_job(job_id: str) -> list[dict[str, Any]] | None:
                 "meta": meta,
             }
         )
-    return out
+    # Dernier run = fin du fichier = plus récent
+    return list(reversed(out))
