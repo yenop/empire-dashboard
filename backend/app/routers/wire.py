@@ -1,5 +1,3 @@
-from datetime import datetime, timezone
-from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -9,13 +7,8 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.database import get_db
-from app.deps import get_current_username, require_internal_api_key
-from app.models import (
-    AgentModel,
-    WireConversationModel,
-    WireMessageModel,
-    WireMessageStatus,
-)
+from app.deps import get_current_username
+from app.models import AgentModel, WireConversationModel, WireMessageModel
 from app.services import openclaw_cron as oc
 from app.services.openclaw_wire_db import get_or_create_openclaw_conversation
 from app.services.wire_outbound import append_nerve_note
@@ -46,9 +39,6 @@ def _db_messages_for_openclaw_job(db: Session, job_id: str) -> list[dict]:
             "created_at": m.created_at.isoformat() if m.created_at else None,
             "source": "dashboard",
             "meta": None,
-            "human_status": m.human_status.value,
-            "ack_at": m.ack_at.isoformat() if m.ack_at else None,
-            "applied_at": m.applied_at.isoformat() if m.applied_at else None,
         }
         for m in msgs
     ]
@@ -166,9 +156,6 @@ def list_messages(
             "created_at": m.created_at.isoformat() if m.created_at else None,
             "source": "database",
             "meta": None,
-            "human_status": m.human_status.value,
-            "ack_at": m.ack_at.isoformat() if m.ack_at else None,
-            "applied_at": m.applied_at.isoformat() if m.applied_at else None,
         }
         for m in msgs
     ]
@@ -251,13 +238,7 @@ def post_wire_message(
     nerve_ok = False
     nerve_err: str | None = None
     if payload.push_to_nerve:
-        nerve_ok, nerve_err = append_nerve_note(
-            db,
-            payload.to_agent_id,
-            payload.body,
-            message_id=msg.id,
-            human_status="sent",
-        )
+        nerve_ok, nerve_err = append_nerve_note(db, payload.to_agent_id, payload.body)
 
     return {
         "ok": True,
@@ -307,71 +288,10 @@ def wire_webhook(
     )
     db.add(msg)
     db.commit()
-    return {"ok": True, "conversation_id": conv.id, "message_id": msg.id}
 
+    # Push dans le Nerve (HEARTBEAT) de l'agent destinataire pour qu'il reçoive le message
+    nerve_ok, nerve_err = False, None
+    if payload.to_agent_id:
+        nerve_ok, nerve_err = append_nerve_note(db, payload.to_agent_id, payload.body)
 
-class WireStatusBody(BaseModel):
-    status: Literal["approved", "rework"]
-    note: str = ""
-
-
-class WireAckBody(BaseModel):
-    ack_type: Literal["ack", "applied"]
-
-
-@router.patch("/messages/{message_id}/status")
-def set_message_status(
-    message_id: int,
-    body: WireStatusBody,
-    _username: str = Depends(get_current_username),
-    db: Session = Depends(get_db),
-) -> dict:
-    msg = db.get(WireMessageModel, message_id)
-    if not msg:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Message introuvable")
-
-    if body.status == "approved":
-        msg.human_status = WireMessageStatus.approved
-    else:
-        msg.human_status = WireMessageStatus.rework
-    db.commit()
-    db.refresh(msg)
-
-    note_text = (body.note or "").strip() or msg.body
-    target_agent = msg.to_agent_id
-    if not target_agent:
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST,
-            detail="Message sans destinataire — impossible d’écrire sur le Nerve",
-        )
-    append_nerve_note(
-        db,
-        target_agent,
-        note_text,
-        message_id=message_id,
-        human_status=body.status,
-    )
-    return {"status": msg.human_status.value}
-
-
-@router.post("/messages/{message_id}/ack")
-def ack_message(
-    message_id: int,
-    body: WireAckBody,
-    db: Session = Depends(get_db),
-    _auth: None = Depends(require_internal_api_key),
-) -> dict:
-    msg = db.get(WireMessageModel, message_id)
-    if not msg:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Message introuvable")
-
-    now = datetime.now(timezone.utc).replace(tzinfo=None)
-    if body.ack_type == "ack":
-        msg.ack_at = now
-        msg.human_status = WireMessageStatus.ack
-    elif body.ack_type == "applied":
-        msg.applied_at = now
-        msg.human_status = WireMessageStatus.applied
-    db.commit()
-    db.refresh(msg)
-    return {"status": msg.human_status.value}
+    return {"ok": True, "conversation_id": conv.id, "message_id": msg.id, "nerve_appended": nerve_ok, "nerve_error": nerve_err}
