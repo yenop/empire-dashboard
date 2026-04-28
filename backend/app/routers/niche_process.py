@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, Depends
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -19,9 +19,7 @@ from app.niche_process_catalog import (
 )
 from app.services.wire_messages import (
     WireConversationNotFound,
-    WireMessageError,
     fetch_messages_for_conversation,
-    post_dashboard_message,
     wire_timeline_sort_key,
 )
 
@@ -141,11 +139,6 @@ class NicheProcessPatch(BaseModel):
     wire: WireIdsPatch | None = None
 
 
-class NicheProcessWireRelayBody(BaseModel):
-    body: str = Field(..., min_length=1, max_length=50_000)
-    push_to_nerve: bool = True
-
-
 @router.get("")
 def get_niche_process(
     _username: str = Depends(get_current_username),
@@ -241,52 +234,3 @@ def get_niche_process_wire_feed(
         "configured": {"marlene": bool(ml), "gaston": bool(ga)},
         "warnings": warnings,
     }
-
-
-@router.post("/wire-relay")
-def post_niche_process_wire_relay(
-    body: NicheProcessWireRelayBody,
-    _username: str = Depends(get_current_username),
-    db: Session = Depends(get_db),
-) -> dict[str, Any]:
-    row = _get_row(db)
-    state = _ensure_payload_shape(row.payload or {})
-    wire = state.get("wire") or {}
-    ml = (wire.get("marlene_conversation_id") or "").strip()
-    ga = (wire.get("gaston_conversation_id") or "").strip()
-    if not ml or not ga:
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST,
-            detail="Renseignez les deux IDs de fil Wire (Marlène et Gaston) dans le Process.",
-        )
-    results: list[dict[str, Any]] = []
-    try:
-        results.append(
-            {
-                "lane": "marlene",
-                **post_dashboard_message(
-                    db,
-                    body=body.body,
-                    to_agent_id="marlene",
-                    conversation_id=ml,
-                    push_to_nerve=body.push_to_nerve,
-                ),
-            }
-        )
-        results.append(
-            {
-                "lane": "gaston",
-                **post_dashboard_message(
-                    db,
-                    body=body.body,
-                    to_agent_id="gaston",
-                    conversation_id=ga,
-                    push_to_nerve=body.push_to_nerve,
-                ),
-            }
-        )
-    except WireConversationNotFound as e:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail=e.detail) from e
-    except WireMessageError as e:
-        raise HTTPException(e.status_code, detail=e.detail) from e
-    return {"ok": True, "results": results}

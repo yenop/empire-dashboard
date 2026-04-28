@@ -13,7 +13,8 @@
     </div>
     <p v-if="err" class="err">{{ err }}</p>
     <p v-else-if="!configured.marlene && !configured.gaston" class="hint">
-      Renseigne les IDs de fil ci-dessus pour agréger les messages des deux agents.
+      Renseigne au moins un ID de fil ci-dessus pour afficher l’activité Wire ici (Marlène seul, Gaston seul, ou les
+      deux une fois l’enchaînement démarré).
     </p>
     <ul v-else-if="!items.length && !loading" class="feed-empty muted">
       Aucun message sur les fils configurés (ou fils vides).

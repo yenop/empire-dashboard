@@ -19,8 +19,10 @@
       <section class="wire-setup card">
         <h4 class="wire-setup-title">Fils Wire (IDs conversation)</h4>
         <p class="wire-setup-desc">
-          Copie l’identifiant du fil depuis la page Wire (numéro ou UUID OpenClaw), puis enregistre. Les deux
-          doivent être renseignés pour le relais et le flux agrégé.
+          Tu dialogues d’abord avec <strong>Marlène</strong> sur Wire, puis tu enchaînes avec <strong>Gaston</strong>
+          (deux fils distincts). Copie chaque identifiant depuis la page Wire (numéro ou UUID OpenClaw), enregistre
+          au blur : cette page fusionne la <strong>lecture</strong> des deux fils pour suivre l’historique. Les
+          envois se font depuis Wire ou les liens « Ouvrir le Wire » ci-dessous — pas d’envoi groupé ici.
         </p>
         <div class="wire-setup-row">
           <label class="wire-lab">
@@ -56,38 +58,6 @@
         :err="wireFeed.err"
         @refresh="loadWireFeed"
       />
-
-      <section class="wire-relay card">
-        <h4 class="wire-relay-title">Message aux deux agents (relais)</h4>
-        <p class="wire-relay-desc">
-          Envoie le même texte sur le fil Marlène et le fil Gaston (Nerve selon la case).
-        </p>
-        <p v-if="relayErr" class="err">{{ relayErr }}</p>
-        <label class="nerve-ck">
-          <input v-model="relayPushNerve" type="checkbox" :disabled="relaySending" />
-          <span>Ajouter la consigne au Nerve (HEARTBEAT)</span>
-        </label>
-        <div class="relay-row">
-          <textarea
-            v-model="relayDraft"
-            class="ta"
-            rows="3"
-            placeholder="Message pour Marlène et Gaston…"
-            :disabled="relaySending || !canRelay"
-          />
-          <button
-            type="button"
-            class="relay-send"
-            :disabled="relaySending || !canRelay || !relayDraft.trim()"
-            @click="sendWireRelay"
-          >
-            {{ relaySending ? 'Envoi…' : 'Envoyer aux deux' }}
-          </button>
-        </div>
-        <p v-if="!canRelay" class="muted relay-hint">
-          Configure les deux IDs de fil ci-dessus pour activer le relais.
-        </p>
-      </section>
 
       <div class="pills" role="tablist" aria-label="Agent">
         <button
@@ -282,16 +252,7 @@ const wireFeed = reactive({
   err: '',
 })
 
-const relayDraft = ref('')
-const relayPushNerve = ref(true)
-const relaySending = ref(false)
-const relayErr = ref('')
-
 let wirePollTimer = null
-
-const canRelay = computed(
-  () => !!(wireIdsLocal.marlene.trim() && wireIdsLocal.gaston.trim())
-)
 
 const identityKwPreview = computed(() => (state.handoff?.identity_keywords || '').trim())
 
@@ -356,30 +317,6 @@ async function saveWireIds() {
     },
   })
   await loadWireFeed()
-}
-
-async function sendWireRelay() {
-  const t = relayDraft.value.trim()
-  if (!t || !canRelay.value) return
-  relaySending.value = true
-  relayErr.value = ''
-  try {
-    await saveWireIds()
-    if (!wireIdsLocal.marlene.trim() || !wireIdsLocal.gaston.trim()) {
-      relayErr.value = 'Les deux IDs de fil sont requis.'
-      return
-    }
-    await api.post('/api/niche-process/wire-relay', {
-      body: t,
-      push_to_nerve: relayPushNerve.value,
-    })
-    relayDraft.value = ''
-    await loadWireFeed()
-  } catch (e) {
-    relayErr.value = e.response?.data?.detail || 'Relais impossible.'
-  } finally {
-    relaySending.value = false
-  }
 }
 
 async function patch(body) {
@@ -594,13 +531,11 @@ onUnmounted(() => {
   color: var(--text-muted);
   font-family: var(--font-mono);
 }
-.wire-setup-title,
-.wire-relay-title {
+.wire-setup-title {
   margin: 0 0 0.35rem;
   font-size: 0.95rem;
 }
-.wire-setup-desc,
-.wire-relay-desc {
+.wire-setup-desc {
   margin: 0 0 0.75rem;
   font-size: 0.78rem;
   color: var(--text-muted);
@@ -636,43 +571,5 @@ onUnmounted(() => {
   color: var(--text);
   font: inherit;
   font-size: 0.85rem;
-}
-.nerve-ck {
-  display: flex;
-  align-items: center;
-  gap: 0.45rem;
-  font-size: 0.78rem;
-  color: var(--text-muted);
-  margin-bottom: 0.5rem;
-  cursor: pointer;
-}
-.relay-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  align-items: flex-end;
-}
-.relay-row .ta {
-  flex: 1 1 200px;
-  min-width: 0;
-}
-.relay-send {
-  font: inherit;
-  font-size: 0.85rem;
-  padding: 0.55rem 0.85rem;
-  border-radius: 8px;
-  border: 1px solid rgba(59, 130, 246, 0.45);
-  background: rgba(59, 130, 246, 0.15);
-  color: var(--text);
-  cursor: pointer;
-  white-space: nowrap;
-}
-.relay-send:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-.relay-hint {
-  margin: 0.5rem 0 0;
-  font-size: 0.78rem;
 }
 </style>
