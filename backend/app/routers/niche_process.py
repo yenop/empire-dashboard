@@ -17,9 +17,18 @@ from app.niche_process_catalog import (
     catalog_payload,
     default_state_payload,
 )
+from app.services.wire_messages import (
+    WireConversationNotFound,
+    fetch_messages_for_conversation,
+    wire_timeline_sort_key,
+)
+from app.services.wire_resolve import resolve_conversation_id_for_agent
+
 router = APIRouter(prefix="/api/niche-process", tags=["niche-process"])
 
 VALID_ITEM_KEYS = frozenset(all_catalog_item_keys())
+_WIRE_ID_KEYS = frozenset({"marlene_conversation_id", "gaston_conversation_id"})
+_MAX_WIRE_CONV_ID_LEN = 120
 
 
 def _deep_merge(base: dict, patch: dict) -> dict:
@@ -42,13 +51,38 @@ def _get_row(db: Session) -> NicheProcessStateModel:
     return row
 
 
+def _normalize_wire_conv_id(val: Any) -> str | None:
+    if val is None:
+        return None
+    if isinstance(val, str):
+        s = " ".join(val.split())
+        if not s:
+            return None
+        if len(s) > _MAX_WIRE_CONV_ID_LEN:
+            return s[:_MAX_WIRE_CONV_ID_LEN]
+        return s
+    return None
+
+
+def _sanitize_wire_block(merged: dict[str, Any]) -> None:
+    w = merged.get("wire") if isinstance(merged.get("wire"), dict) else {}
+    merged["wire"] = {
+        "marlene_conversation_id": _normalize_wire_conv_id(
+            w.get("marlene_conversation_id")
+        ),
+        "gaston_conversation_id": _normalize_wire_conv_id(
+            w.get("gaston_conversation_id")
+        ),
+    }
+
+
 def _ensure_payload_shape(p: dict[str, Any]) -> dict[str, Any]:
     d = default_state_payload()
     merged = _deep_merge(d, p)
     # Prune items_checked to valid keys only
     ic = merged.get("items_checked") or {}
     merged["items_checked"] = {k: bool(v) for k, v in ic.items() if k in VALID_ITEM_KEYS}
-    merged.pop("wire", None)  # legacy conversation-id block; no longer used
+    _sanitize_wire_block(merged)
     return merged
 
 
@@ -91,6 +125,11 @@ def _compute(state: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+class WireIdsPatch(BaseModel):
+    marlene_conversation_id: str | None = None
+    gaston_conversation_id: str | None = None
+
+
 class NicheProcessPatch(BaseModel):
     items_checked: dict[str, bool] | None = None
     handoff: dict[str, str] | None = None
@@ -98,6 +137,7 @@ class NicheProcessPatch(BaseModel):
     scores_seo: dict[str, float | None] | None = None
     red_flags: dict[str, bool] | None = None
     notes: dict[str, str] | None = None
+    wire: WireIdsPatch | None = None
 
 
 @router.get("")
@@ -142,6 +182,13 @@ def patch_niche_process(
         for k in list(patch["red_flags"].keys()):
             if k not in allowed:
                 del patch["red_flags"][k]
+    if "wire" in patch and patch["wire"] is not None:
+        cur = dict(state.get("wire") or {})
+        raw = patch["wire"] if isinstance(patch["wire"], dict) else {}
+        for k in _WIRE_ID_KEYS:
+            if k in raw:
+                cur[k] = _normalize_wire_conv_id(raw.get(k))
+        patch["wire"] = cur
     state = _deep_merge(state, patch)
     state = _ensure_payload_shape(state)
     row.payload = state
@@ -153,4 +200,42 @@ def patch_niche_process(
         **cat,
         "state": state,
         "computed": _compute(state),
+    }
+
+
+@router.get("/wire-feed")
+def get_niche_process_wire_feed(
+    _username: str = Depends(get_current_username),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    row = _get_row(db)
+    state = _ensure_payload_shape(row.payload or {})
+    wire = state.get("wire") or {}
+    ml = (wire.get("marlene_conversation_id") or "").strip() or (
+        resolve_conversation_id_for_agent(db, "marlene") or ""
+    )
+    ga = (wire.get("gaston_conversation_id") or "").strip() or (
+        resolve_conversation_id_for_agent(db, "gaston") or ""
+    )
+    items: list[dict[str, Any]] = []
+    warnings: list[str] = []
+
+    for lane, cid in (("marlene", ml), ("gaston", ga)):
+        if not cid:
+            continue
+        try:
+            msgs = fetch_messages_for_conversation(db, cid)
+            for m in msgs:
+                row_item = dict(m)
+                row_item["lane"] = lane
+                row_item["wire_conversation_id"] = cid
+                items.append(row_item)
+        except WireConversationNotFound as e:
+            warnings.append(f"{lane}: {e.detail}")
+
+    items.sort(key=wire_timeline_sort_key)
+    return {
+        "items": items,
+        "configured": {"marlene": bool(ml), "gaston": bool(ga)},
+        "warnings": warnings,
     }

@@ -16,6 +16,11 @@
 
       <ProcessPipeline :pipeline="payload.pipeline" />
 
+      <p class="wire-auto-hint muted">
+        Les fils Wire de Marlène et Gaston sont <strong>détectés automatiquement</strong> comme sur la page Wire
+        (job OpenClaw par agent, ou conversation DB la plus récente qui les concerne). Les envois restent sur Wire.
+      </p>
+
       <div class="pills" role="tablist" aria-label="Agent">
         <button
           type="button"
@@ -56,6 +61,16 @@
           </RouterLink>
           <span class="wire-hint">Propositions, consignes, compte rendu vers l’agent.</span>
         </p>
+
+        <ProcessWireFeed
+          lane-filter="marlene"
+          :items="wireFeed.items"
+          :warnings="wireFeed.warnings"
+          :configured="wireFeed.configured"
+          :loading="wireFeed.loading"
+          :err="wireFeed.err"
+          @refresh="loadWireFeed"
+        />
 
         <section class="handoff card">
           <h4 class="hand-title">Mots-clés identitaires niche → Gaston</h4>
@@ -99,6 +114,16 @@
           <span class="wire-hint">Collecte SEO, filtrage, verdict — dialogue avec l’agent.</span>
         </p>
 
+        <ProcessWireFeed
+          lane-filter="gaston"
+          :items="wireFeed.items"
+          :warnings="wireFeed.warnings"
+          :configured="wireFeed.configured"
+          :loading="wireFeed.loading"
+          :err="wireFeed.err"
+          @refresh="loadWireFeed"
+        />
+
         <section class="handoff card readonly">
           <h4 class="hand-title">Mots-clés identitaires (depuis Marlène)</h4>
           <p v-if="!identityKwPreview" class="empty-hint">Renseigne le bloc Marlène pour voir le filtre ici.</p>
@@ -126,6 +151,15 @@
       </div>
 
       <div v-show="tab === 'decision'" class="panel decision">
+        <ProcessWireFeed
+          lane-filter="all"
+          :items="wireFeed.items"
+          :warnings="wireFeed.warnings"
+          :configured="wireFeed.configured"
+          :loading="wireFeed.loading"
+          :err="wireFeed.err"
+          @refresh="loadWireFeed"
+        />
         <ProcessScoringPanel
           :scores-business="state.scores_business"
           :scores-seo="state.scores_seo"
@@ -157,12 +191,13 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import api from '@/api'
 import ProcessPipeline from '@/components/process/ProcessPipeline.vue'
 import ProcessChecklist from '@/components/process/ProcessChecklist.vue'
 import ProcessScoringPanel from '@/components/process/ProcessScoringPanel.vue'
 import ProcessRedFlags from '@/components/process/ProcessRedFlags.vue'
+import ProcessWireFeed from '@/components/process/ProcessWireFeed.vue'
 
 const loading = ref(true)
 const err = ref('')
@@ -182,7 +217,18 @@ const state = reactive({
   scores_seo: {},
   red_flags: {},
   notes: {},
+  wire: { marlene_conversation_id: null, gaston_conversation_id: null },
 })
+
+const wireFeed = reactive({
+  items: [],
+  warnings: [],
+  configured: { marlene: false, gaston: false },
+  loading: false,
+  err: '',
+})
+
+let wirePollTimer = null
 
 const computedScores = ref(null)
 
@@ -215,10 +261,28 @@ async function load() {
   try {
     const { data } = await api.get('/api/niche-process')
     assignPayload(data)
+    await loadWireFeed()
   } catch (e) {
     err.value = e.response?.data?.detail || 'Impossible de charger le process.'
   } finally {
     loading.value = false
+  }
+}
+
+async function loadWireFeed() {
+  wireFeed.loading = true
+  wireFeed.err = ''
+  try {
+    const { data } = await api.get('/api/niche-process/wire-feed')
+    wireFeed.items = data.items || []
+    wireFeed.warnings = data.warnings || []
+    wireFeed.configured = data.configured || { marlene: false, gaston: false }
+  } catch (e) {
+    wireFeed.err = e.response?.data?.detail || 'Flux Wire indisponible.'
+    wireFeed.items = []
+    wireFeed.warnings = []
+  } finally {
+    wireFeed.loading = false
   }
 }
 
@@ -280,9 +344,17 @@ function onRedFlag(key, checked) {
 
 watch(tab, () => {
   err.value = ''
+  loadWireFeed()
 })
 
-onMounted(load)
+onMounted(() => {
+  load()
+  wirePollTimer = setInterval(loadWireFeed, 25_000)
+})
+
+onUnmounted(() => {
+  if (wirePollTimer) clearInterval(wirePollTimer)
+})
 </script>
 
 <style scoped>
@@ -306,6 +378,12 @@ onMounted(load)
 }
 .muted {
   color: var(--text-muted);
+}
+.wire-auto-hint {
+  margin: 0 0 1rem;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  max-width: 52rem;
 }
 .err {
   color: var(--danger);
@@ -426,5 +504,8 @@ onMounted(load)
   font-size: 0.72rem;
   color: var(--text-muted);
   font-family: var(--font-mono);
+}
+.decision .wire-feed {
+  margin-bottom: 1rem;
 }
 </style>
