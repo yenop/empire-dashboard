@@ -40,7 +40,10 @@
                 <span class="arrow">→</span>
                 <span class="to">{{ labelAgent(m.to_agent_id) }}</span>
                 <span v-if="m.meta" class="meta-run">{{ m.meta.status }}{{ m.meta.tokens != null ? ' · ' + m.meta.tokens + ' tok' : '' }}</span>
-                <time>{{ m.created_at }}</time>
+                <time
+                  v-if="m.created_at"
+                  :datetime="wireDatetimeAttr(m.created_at)"
+                >{{ formatWireDate(m.created_at) }}</time>
               </div>
               <p class="body">{{ m.body }}</p>
             </article>
@@ -65,6 +68,24 @@ const wireSource = ref('database')
 const activeId = ref(null)
 const messages = ref([])
 const agentsById = ref({})
+
+const wireDateFmt = new Intl.DateTimeFormat('fr-FR', {
+  dateStyle: 'long',
+  timeStyle: 'short',
+})
+
+function formatWireDate(raw) {
+  if (!raw) return '—'
+  const d = new Date(typeof raw === 'string' ? raw.trim() : raw)
+  if (Number.isNaN(d.getTime())) return String(raw)
+  return wireDateFmt.format(d)
+}
+
+function wireDatetimeAttr(raw) {
+  const d = new Date(typeof raw === 'string' ? raw.trim() : raw)
+  if (Number.isNaN(d.getTime())) return undefined
+  return d.toISOString()
+}
 
 function labelAgent(id) {
   if (!id) return '—'
