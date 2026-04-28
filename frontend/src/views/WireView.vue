@@ -93,13 +93,56 @@
           </button>
         </div>
       </div>
-      <div v-if="!filteredConversations.length" class="empty filter-empty">Aucune conversation ne correspond aux filtres.</div>
-    <div v-else class="wire-board">
-      <section class="feed scroll-thin">
-        <div class="feed-head">
-          <h3 class="feed-title">Conversations ({{ filteredConversations.length }})</h3>
-        </div>
-        <ul class="feed-list" role="list">
+      <div class="wire-board">
+          <div class="feed-top">
+            <div class="composer-wrap">
+              <p v-if="!activeId" class="composer-hint muted">Sélectionnez un fil ci-dessous pour cibler l’envoi.</p>
+              <div class="composer composer-feed">
+                <p v-if="sendErr" class="err">{{ sendErr }}</p>
+                <div class="row">
+                  <label class="lab">
+                    <span class="lab-t">Destinataire</span>
+                    <select
+                      v-model="toAgentId"
+                      class="sel"
+                      :disabled="sending || !agentsList.length"
+                    >
+                      <option disabled value="">— Choisir un agent —</option>
+                      <option v-for="a in agentsList" :key="a.id" :value="a.id">
+                        {{ a.emoji }} {{ a.name }} ({{ a.id }})
+                      </option>
+                    </select>
+                  </label>
+                  <label class="nerve-ck">
+                    <input v-model="pushNerve" type="checkbox" :disabled="sending" />
+                    <span>Ajouter la consigne au Nerve (HEARTBEAT)</span>
+                  </label>
+                </div>
+                <div class="row2">
+                  <textarea
+                    v-model="draft"
+                    class="ta"
+                    rows="3"
+                    placeholder="Message pour l’agent…"
+                    :disabled="sending"
+                  />
+                  <button
+                    type="button"
+                    class="send"
+                    :disabled="sendDisabled"
+                    @click="sendMessage"
+                  >
+                    {{ sending ? 'Envoi…' : 'Envoyer' }}
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div class="feed-head">
+              <h3 class="feed-title">Conversations ({{ filteredConversations.length }})</h3>
+            </div>
+          </div>
+          <div class="feed-bottom scroll-thin">
+        <ul v-if="filteredConversations.length" class="feed-list" role="list">
           <li v-for="c in filteredConversations" :key="c.id" class="feed-item">
             <button
               type="button"
@@ -136,17 +179,21 @@
             </button>
           </li>
         </ul>
-      </section>
-      <main class="thread scroll-thin">
-        <div v-if="!activeId" class="empty">Sélectionnez une conversation.</div>
+        <p v-else class="empty filter-empty filter-empty--in-feed">Aucune conversation ne correspond aux filtres.</p>
+          </div>
+      <main class="thread scroll-thin" aria-label="Fil de la conversation">
+        <div v-if="!activeId" class="empty">Sélectionnez une conversation pour lire le fil.</div>
         <template v-else>
-          <div v-if="msgLoading" class="muted">Messages…</div>
+          <div v-if="msgLoading" class="muted">Chargement des messages…</div>
           <div v-else class="msgs">
             <p v-if="statusErr" class="err status-err">{{ statusErr }}</p>
             <article v-for="m in messages" :key="String(m.id)" class="msg">
               <div class="msg-head">
-                <span v-if="m.source === 'dashboard'" class="src-badge" title="Message depuis le dashboard"
-                  >Dashboard</span
+                <span
+                  v-if="m.source === 'dashboard'"
+                  class="src-badge"
+                  title="Message depuis le dashboard"
+                >Dashboard</span
                 >
                 <template v-for="line in [exchangeLine(m)]" :key="line.mode + '-' + m.id">
                   <span class="ex-pair">
@@ -155,7 +202,13 @@
                     <span :class="line.b === 'all' ? 'all-low' : 'to'">{{ line.b }}</span>
                   </span>
                 </template>
-                <span v-if="m.meta" class="meta-run">{{ m.meta.status }}{{ m.meta.tokens != null ? ' · ' + m.meta.tokens + ' tok' : '' }}</span>
+                <span
+                  v-if="m.meta"
+                  class="meta-run"
+                >{{ m.meta.status
+                }}{{
+                  m.meta.tokens != null ? ' · ' + m.meta.tokens + ' tok' : ''
+                }}</span>
                 <time
                   v-if="m.created_at"
                   :datetime="wireDatetimeAttr(m.created_at)"
@@ -186,41 +239,6 @@
               </div>
             </article>
           </div>
-          <footer v-if="!msgLoading" class="composer">
-            <p v-if="sendErr" class="err">{{ sendErr }}</p>
-            <div class="row">
-              <label class="lab">
-                <span class="lab-t">Destinataire</span>
-                <select v-model="toAgentId" class="sel" :disabled="sending || !agentsList.length">
-                  <option disabled value="">— Choisir un agent —</option>
-                  <option v-for="a in agentsList" :key="a.id" :value="a.id">
-                    {{ a.emoji }} {{ a.name }} ({{ a.id }})
-                  </option>
-                </select>
-              </label>
-              <label class="nerve-ck">
-                <input v-model="pushNerve" type="checkbox" :disabled="sending" />
-                <span>Ajouter la consigne au Nerve (HEARTBEAT)</span>
-              </label>
-            </div>
-            <div class="row2">
-              <textarea
-                v-model="draft"
-                class="ta"
-                rows="3"
-                placeholder="Message pour l’agent…"
-                :disabled="sending"
-              />
-              <button
-                type="button"
-                class="send"
-                :disabled="sending || !draft.trim() || !toAgentId"
-                @click="sendMessage"
-              >
-                {{ sending ? 'Envoi…' : 'Envoyer' }}
-              </button>
-            </div>
-          </footer>
         </template>
       </main>
     </div>
@@ -291,6 +309,15 @@ const filteredConversations = computed(() => {
   }
   return list
 })
+
+const sendDisabled = computed(
+  () =>
+    sending.value ||
+    !draft.value.trim() ||
+    !toAgentId.value ||
+    !activeId.value ||
+    msgLoading.value
+)
 
 const wireDateFmt = new Intl.DateTimeFormat('fr-FR', {
   dateStyle: 'long',
@@ -799,26 +826,71 @@ onMounted(loadConversations)
 }
 .wire-board {
   display: grid;
-  grid-template-columns: minmax(0, 1.15fr) minmax(300px, 0.9fr);
+  grid-template-columns: minmax(0, 1.15fr) minmax(280px, 0.9fr);
+  grid-template-rows: auto 1fr;
   gap: 1rem;
-  align-items: start;
+  align-items: stretch;
   min-height: 420px;
+  max-height: min(84vh, 860px);
 }
-.feed {
+/* Colonne 1 = deux cellules (l.1 = composer + titre, l.2 = liste) ; fil en col.2 l.2 — aligné avec la liste, pas avec le titre */
+.feed-top {
+  grid-column: 1;
+  grid-row: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-  min-width: 0;
-  max-height: min(78vh, 720px);
+  gap: 0.35rem;
+  align-self: start;
+  width: 100%;
+  box-sizing: border-box;
   border: 1px solid var(--border);
-  border-radius: 10px;
-  background: #0003;
-  padding: 0.5rem 0.35rem 0.65rem;
-}
-.feed-head {
-  padding: 0.2rem 0.5rem 0.4rem;
   border-bottom: 1px solid #ffffff0d;
-  margin-bottom: 0.25rem;
+  border-radius: 10px 10px 0 0;
+  background: #0003;
+  padding: 0.5rem 0.35rem 0.4rem;
+}
+.feed-bottom {
+  grid-column: 1;
+  grid-row: 2;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  border: 1px solid var(--border);
+  border-top: none;
+  border-radius: 0 0 10px 10px;
+  background: #0003;
+  margin-top: -1px;
+  padding: 0.4rem 0.15rem 0.5rem;
+  overflow: hidden;
+}
+.composer-wrap {
+  padding: 0.15rem 0.45rem 0.65rem;
+  margin: -0.15rem -0.2rem 0.35rem;
+  border-bottom: 1px solid #ffffff0d;
+}
+.composer-hint {
+  margin: 0 0 0.55rem;
+  font-size: 0.68rem;
+  line-height: 1.45;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+.composer-feed {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+.filter-empty--in-feed {
+  padding: 0.65rem 0.5rem;
+  margin: 0;
+}
+.feed-top .feed-head {
+  padding: 0.25rem 0.5rem 0.35rem;
+  border-bottom: none;
+  margin-bottom: 0;
 }
 .feed-title {
   margin: 0;
@@ -826,6 +898,11 @@ onMounted(loadConversations)
   font-weight: 600;
   color: #e2e8f0;
   font-family: var(--font-mono);
+}
+.feed-bottom .feed-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
 }
 .feed-list {
   list-style: none;
@@ -835,7 +912,7 @@ onMounted(loadConversations)
   flex-direction: column;
   gap: 0.4rem;
   overflow: auto;
-  max-height: min(68vh, 640px);
+  max-height: 100%;
 }
 .feed-item {
   margin: 0;
@@ -984,12 +1061,17 @@ onMounted(loadConversations)
 .err {
   color: var(--danger);
 }
+/* Fil actif : uniquement ligne basse, colonne droite — sous le niveau du titre « Conversations » */
 .thread {
+  grid-column: 2;
+  grid-row: 2;
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 1rem;
-  max-height: min(78vh, 720px);
+  min-height: 0;
+  max-height: 100%;
+  align-self: stretch;
   overflow: auto;
 }
 .ex-pair {
@@ -1008,12 +1090,21 @@ onMounted(loadConversations)
 @media (max-width: 900px) {
   .wire-board {
     grid-template-columns: 1fr;
+    grid-template-rows: auto auto 1fr;
   }
-  .feed {
-    max-height: min(50vh, 420px);
+  .feed-top {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .feed-bottom {
+    grid-column: 1;
+    grid-row: 2;
+    max-height: min(38vh, 400px);
   }
   .thread {
-    max-height: min(50vh, 400px);
+    grid-column: 1;
+    grid-row: 3;
+    max-height: min(50vh, 450px);
   }
 }
 .empty {
