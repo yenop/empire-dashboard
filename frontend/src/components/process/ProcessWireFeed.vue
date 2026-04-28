@@ -16,24 +16,50 @@
       Aucun fil détecté pour cet agent : vérifie le <strong>jobId</strong> OpenClaw dans la carte agent (AGENTS_MAP),
       ou qu’une conversation Wire en base mentionne bien cet agent dans le dernier message.
     </p>
-    <ul v-else-if="!filteredItems.length && !loading" class="feed-empty muted">
-      Aucun message sur ce fil pour l’instant.
-    </ul>
-    <ul v-else class="feed-list scroll-thin" role="list">
-      <li
-        v-for="(m, idx) in filteredItems"
-        :key="feedKey(m, idx)"
-        class="feed-row"
-        :class="laneClass(m.lane)"
+    <p v-else-if="!latestSlots.length && !loading" class="feed-empty muted">{{ emptyHint }}</p>
+    <div v-else class="latest-root" :class="{ dual: laneFilter === 'all' && latestSlots.length > 1 }">
+      <article
+        v-for="slot in latestSlots"
+        :key="slotKey(slot)"
+        class="latest-article"
+        :class="laneClass(slot.agent)"
       >
-        <span class="lane-badge" :class="laneClass(m.lane)">{{ laneLabel(m.lane) }}</span>
-        <span class="meta">
-          <span class="who">{{ formatWho(m) }}</span>
-          <time v-if="m.created_at" class="ts" :datetime="m.created_at">{{ m.created_at }}</time>
-        </span>
-        <pre class="body">{{ m.body }}</pre>
-      </li>
-    </ul>
+        <header class="latest-head">
+          <span class="lane-badge" :class="laneClass(slot.agent)">{{ laneLabel(slot.agent) }}</span>
+          <span class="meta">
+            <span class="who">{{ formatWho(slot.message) }}</span>
+            <time v-if="slot.message.created_at" class="ts" :datetime="slot.message.created_at">{{
+              slot.message.created_at
+            }}</time>
+          </span>
+        </header>
+        <div class="rich-root">
+          <template v-for="(block, bi) in blocksFor(slot.message.body)" :key="bi">
+            <div v-if="block.isNiche" class="niche-card">
+              <div class="niche-card-top">
+                <h5 class="niche-title">{{ block.title }}</h5>
+                <span v-if="block.score" class="niche-score">Score {{ block.score }}/10</span>
+              </div>
+              <p v-for="(line, li) in trimLines(block.lines, 12)" :key="li" class="niche-line">
+                <template v-for="(seg, si) in inlineSegments(line)" :key="si">
+                  <strong v-if="seg.b">{{ seg.t }}</strong>
+                  <template v-else>{{ seg.t }}</template>
+                </template>
+              </p>
+            </div>
+            <div v-else class="text-block" :class="{ preamble: block.preamble }">
+              <h4 v-if="!block.preamble" class="block-title">{{ block.title }}</h4>
+              <p v-for="(line, li) in trimLines(block.lines, 24)" :key="li" class="md-line">
+                <template v-for="(seg, si) in inlineSegments(line)" :key="si">
+                  <strong v-if="seg.b">{{ seg.t }}</strong>
+                  <template v-else>{{ seg.t }}</template>
+                </template>
+              </p>
+            </div>
+          </template>
+        </div>
+      </article>
+    </div>
     <ul v-if="filteredWarnings.length" class="warn-list">
       <li v-for="(w, i) in filteredWarnings" :key="i" class="warn">{{ w }}</li>
     </ul>
@@ -42,6 +68,7 @@
 
 <script setup>
 import { computed } from 'vue'
+import { parseReportBlocks, pickLatestAgentReplyAfterHuman } from '@/utils/processWireParse'
 
 const props = defineProps({
   items: { type: Array, default: () => [] },
@@ -50,7 +77,6 @@ const props = defineProps({
     type: Object,
     default: () => ({ marlene: false, gaston: false }),
   },
-  /** Afficher uniquement ce fil, ou tout si "all" (ex. onglet Décision). */
   laneFilter: {
     type: String,
     default: 'all',
@@ -63,9 +89,9 @@ const props = defineProps({
 defineEmits(['refresh'])
 
 const title = computed(() => {
-  if (props.laneFilter === 'marlene') return 'Réponses & messages — fil Marlène'
-  if (props.laneFilter === 'gaston') return 'Réponses & messages — fil Gaston'
-  return 'Activité Wire (Marlène + Gaston)'
+  if (props.laneFilter === 'marlene') return 'Dernière synthèse — Marlène'
+  if (props.laneFilter === 'gaston') return 'Dernière synthèse — Gaston'
+  return 'Dernières synthèses — fils Wire'
 })
 
 const hasAnyLane = computed(() => {
@@ -74,10 +100,60 @@ const hasAnyLane = computed(() => {
   return props.configured.marlene || props.configured.gaston
 })
 
-const filteredItems = computed(() => {
-  const list = props.items || []
-  if (props.laneFilter === 'all') return list
-  return list.filter((m) => m.lane === props.laneFilter)
+const latestSlots = computed(() => {
+  const items = props.items || []
+  if (props.laneFilter === 'marlene') {
+    const m = pickLatestAgentReplyAfterHuman(
+      items.filter((i) => i.lane === 'marlene'),
+      'marlene'
+    )
+    return m ? [{ message: m, agent: 'marlene' }] : []
+  }
+  if (props.laneFilter === 'gaston') {
+    const m = pickLatestAgentReplyAfterHuman(
+      items.filter((i) => i.lane === 'gaston'),
+      'gaston'
+    )
+    return m ? [{ message: m, agent: 'gaston' }] : []
+  }
+  const slots = []
+  const ml = pickLatestAgentReplyAfterHuman(
+    items.filter((i) => i.lane === 'marlene'),
+    'marlene'
+  )
+  const ga = pickLatestAgentReplyAfterHuman(
+    items.filter((i) => i.lane === 'gaston'),
+    'gaston'
+  )
+  if (ml) slots.push({ message: ml, agent: 'marlene' })
+  if (ga) slots.push({ message: ga, agent: 'gaston' })
+  return slots
+})
+
+function laneItems(lane) {
+  return (props.items || []).filter((i) => i.lane === lane)
+}
+
+function hintForLane(lane, label) {
+  const ix = laneItems(lane)
+  if (!ix.length) {
+    return `${label} : pas encore de messages sur ce fil.`
+  }
+  if (!ix.some((m) => m.from_agent_id === 'dashboard')) {
+    return `${label} : aucun message envoyé par vous depuis le dashboard sur ce fil — écrivez d’abord depuis Wire.`
+  }
+  return `${label} : en attente de la réponse de l’agent après votre dernier message.`
+}
+
+const emptyHint = computed(() => {
+  if (props.laneFilter === 'marlene') {
+    return hintForLane('marlene', 'Marlène')
+  }
+  if (props.laneFilter === 'gaston') {
+    return hintForLane('gaston', 'Gaston')
+  }
+  const parts = [hintForLane('marlene', 'Marlène'), hintForLane('gaston', 'Gaston')].filter(Boolean)
+  return parts.length ? parts.join(' ') : 'Pas de réponse agent après un message dashboard sur ces fils.'
 })
 
 const filteredWarnings = computed(() => {
@@ -87,16 +163,42 @@ const filteredWarnings = computed(() => {
   return w.filter((line) => line.toLowerCase().startsWith(prefix))
 })
 
-function laneClass(lane) {
-  if (lane === 'gaston') return 'lane-ga'
-  if (lane === 'marlene') return 'lane-ml'
+function blocksFor(body) {
+  const blocks = parseReportBlocks(body)
+  return blocks.length ? blocks : [{ title: 'Message', lines: (body || '').split('\n'), isNiche: false, score: null, preamble: false }]
+}
+
+function trimLines(lines, max) {
+  const arr = (lines || []).map((l) => l.trimEnd()).filter((l) => l.trim().length > 0)
+  return arr.slice(0, max)
+}
+
+function inlineSegments(line) {
+  const s = line || ''
+  const parts = []
+  const re = /\*\*(.+?)\*\*/g
+  let last = 0
+  let m
+  while ((m = re.exec(s))) {
+    if (m.index > last) parts.push({ t: s.slice(last, m.index), b: false })
+    parts.push({ t: m[1], b: true })
+    last = m.index + m[0].length
+  }
+  if (last < s.length) parts.push({ t: s.slice(last), b: false })
+  if (!parts.length) parts.push({ t: s, b: false })
+  return parts
+}
+
+function laneClass(agent) {
+  if (agent === 'gaston') return 'lane-ga'
+  if (agent === 'marlene') return 'lane-ml'
   return 'lane-unk'
 }
 
-function laneLabel(lane) {
-  if (lane === 'gaston') return 'Gaston'
-  if (lane === 'marlene') return 'Marlène'
-  return lane || '—'
+function laneLabel(agent) {
+  if (agent === 'gaston') return 'Gaston'
+  if (agent === 'marlene') return 'Marlène'
+  return agent || '—'
 }
 
 function formatWho(m) {
@@ -105,11 +207,10 @@ function formatWho(m) {
   return `${fr} → ${to}`
 }
 
-function feedKey(m, idx) {
-  const id = m.id != null ? String(m.id) : ''
-  const lane = m.lane || ''
-  const t = m.created_at || ''
-  return `${lane}-${id}-${t}-${idx}`
+function slotKey(slot) {
+  const id = slot.message?.id != null ? String(slot.message.id) : ''
+  const t = slot.message?.created_at || ''
+  return `${slot.agent}-${id}-${t}`
 }
 </script>
 
@@ -122,7 +223,7 @@ function feedKey(m, idx) {
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
-  margin-bottom: 0.65rem;
+  margin-bottom: 0.75rem;
 }
 .wire-feed-title {
   margin: 0;
@@ -156,27 +257,35 @@ function feedKey(m, idx) {
   font-size: 0.82rem;
   line-height: 1.45;
 }
-.feed-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  max-height: 260px;
-  overflow-y: auto;
+.latest-root {
   display: flex;
   flex-direction: column;
-  gap: 0.65rem;
+  gap: 1rem;
 }
-.feed-row {
+.latest-root.dual {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+@media (max-width: 720px) {
+  .latest-root.dual {
+    grid-template-columns: 1fr;
+  }
+}
+.latest-article {
   border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 0.55rem 0.65rem;
-  background: rgba(0, 0, 0, 0.2);
+  border-radius: 12px;
+  padding: 0.75rem 0.85rem;
+  background: rgba(0, 0, 0, 0.22);
 }
-.feed-row.lane-ml {
-  border-color: rgba(236, 72, 153, 0.35);
+.latest-article.lane-ml {
+  border-color: rgba(236, 72, 153, 0.4);
 }
-.feed-row.lane-ga {
-  border-color: rgba(59, 130, 246, 0.35);
+.latest-article.lane-ga {
+  border-color: rgba(59, 130, 246, 0.4);
+}
+.latest-head {
+  margin-bottom: 0.65rem;
 }
 .lane-badge {
   display: inline-block;
@@ -188,11 +297,11 @@ function feedKey(m, idx) {
   margin-bottom: 0.35rem;
 }
 .lane-badge.lane-ml {
-  background: rgba(236, 72, 153, 0.15);
+  background: rgba(236, 72, 153, 0.18);
   color: #f9a8d4;
 }
 .lane-badge.lane-ga {
-  background: rgba(59, 130, 246, 0.15);
+  background: rgba(59, 130, 246, 0.18);
   color: #93c5fd;
 }
 .lane-badge.lane-unk {
@@ -206,21 +315,65 @@ function feedKey(m, idx) {
   font-size: 0.72rem;
   color: var(--text-muted);
   font-family: var(--font-mono, monospace);
+}
+.rich-root {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.niche-card {
+  border-radius: 10px;
+  padding: 0.55rem 0.65rem;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.niche-card-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
   margin-bottom: 0.35rem;
 }
-.who {
-  word-break: break-all;
-}
-.ts {
-  opacity: 0.85;
-}
-.body {
+.niche-title {
   margin: 0;
-  white-space: pre-wrap;
-  font-family: inherit;
-  font-size: 0.84rem;
-  line-height: 1.45;
+  font-size: 0.86rem;
+  font-weight: 600;
   color: var(--text);
+  line-height: 1.35;
+}
+.niche-score {
+  font-size: 0.78rem;
+  font-family: var(--font-mono, monospace);
+  color: #fbbf24;
+  white-space: nowrap;
+}
+.niche-line {
+  margin: 0.15rem 0 0;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+.text-block {
+  padding: 0.15rem 0;
+}
+.text-block.preamble {
+  opacity: 0.88;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+.block-title {
+  margin: 0 0 0.35rem;
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: var(--text);
+}
+.md-line {
+  margin: 0.2rem 0 0;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: var(--text);
+  white-space: pre-wrap;
 }
 .warn-list {
   margin: 0.65rem 0 0;
@@ -230,8 +383,5 @@ function feedKey(m, idx) {
 }
 .warn {
   margin: 0.15rem 0;
-}
-.scroll-thin {
-  scrollbar-width: thin;
 }
 </style>
