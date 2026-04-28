@@ -17,7 +17,7 @@
         <button
           type="button"
           class="section-head"
-          :class="{ 'section-head--system': section.accent === 'system' }"
+          :class="{ 'section-head--command': section.accent === 'system' }"
           :aria-expanded="sectionOpen[section.id]"
           :aria-controls="`nav-section-${section.id}`"
           @click="toggleSection(section.id)"
@@ -39,7 +39,8 @@
               @click="onNavClick"
             >
               <span class="nav-link-main">
-                <span class="icon" aria-hidden="true">{{ item.icon }}</span>
+                <NavIcon :name="item.icon" class="nav-icon-slot" />
+                <span v-if="item.labelEmoji" class="label-emoji" aria-hidden="true">{{ item.labelEmoji }}</span>
                 <span class="nav-text">{{ item.label }}</span>
               </span>
               <span v-if="item.placeholder" class="pill-soon">bientôt</span>
@@ -58,7 +59,8 @@
                 @click="(e) => { navigate(e); onNavClick() }"
               >
                 <span class="nav-link-main">
-                  <span class="icon" aria-hidden="true">{{ item.icon }}</span>
+                  <NavIcon :name="item.icon" class="nav-icon-slot" />
+                  <span v-if="item.labelEmoji" class="label-emoji" aria-hidden="true">{{ item.labelEmoji }}</span>
                   <span class="nav-text">{{ item.label }}</span>
                 </span>
               </a>
@@ -90,6 +92,7 @@ import { computed, inject, reactive, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { NAV_SECTIONS } from '@/config/navSections'
+import NavIcon from '@/components/layout/NavIcon.vue'
 import { useSidebarStatus } from '@/composables/useSidebarStatus'
 
 const LS_PREFIX = 'empire-nav-open-'
@@ -156,7 +159,7 @@ const progress = computed(() => Math.min(100, (mrrCurrent / 10000) * 100))
 
 <style scoped>
 .sidebar {
-  width: 248px;
+  width: 260px;
   flex-shrink: 0;
   background: var(--bg-sidebar);
   border-right: 1px solid var(--border);
@@ -234,16 +237,16 @@ const progress = computed(() => Math.min(100, (mrrCurrent / 10000) * 100))
   background: #ffffff06;
 }
 .section-label {
-  font-family: var(--font-mono);
-  font-size: 0.65rem;
+  font-family: var(--font-sans);
+  font-size: 0.68rem;
   font-weight: 700;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
 }
-.section-head--system .section-label {
+.section-head--command .section-label {
   color: var(--warning);
 }
-.section-head:not(.section-head--system) .section-label {
+.section-head:not(.section-head--command) .section-label {
   color: var(--text-muted);
 }
 .chevron {
@@ -286,16 +289,27 @@ const progress = computed(() => Math.min(100, (mrrCurrent / 10000) * 100))
   background: rgba(255, 255, 255, 0.1);
   color: var(--text);
 }
+.nav-link.active :deep(.nav-icon) {
+  opacity: 1;
+  color: var(--text);
+}
 .nav-link-main {
   display: flex;
   align-items: center;
   gap: 0.45rem;
   min-width: 0;
 }
-.icon {
-  font-size: 0.95rem;
+.nav-icon-slot {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  color: inherit;
+}
+.label-emoji {
+  font-size: 0.8rem;
   line-height: 1;
   flex-shrink: 0;
+  margin-left: 0.1rem;
 }
 .nav-text {
   overflow: hidden;

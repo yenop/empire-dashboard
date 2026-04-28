@@ -149,3 +149,14 @@ ubuntu@vps-8b89efa9:~$ docker ps | grep nginx
 99ba4fddfdbb   tiktok-workflow-manager-nginx-proxy   "/docker-entrypoint.…"   5 weeks ago     Up 2 weeks (unhealthy)          0.0.0.0:8083->80/tcp, [::]:8083->80/tcp                                                                                 tiktok-workflow-manager-nginx-proxy-1
 5b88e93bedbe   testfactory-emi-nginx                 "/docker-entrypoint.…"   5 weeks ago     Up 2 weeks                      0.0.0.0:81->80/tcp, [::]:81->80/tcp                                                                                     emi-nginx
 ubuntu@vps-8b89efa9:~$ docker exec orchestrator_nginx nginx -s reload
+
+cd /home/ubuntu/.openclaw/workspace/empire-dashboard
+
+# 1. Pull (déjà pushé depuis ici)
+git pull
+
+# 2. Rebuild frontend + backend (nouveau menu + nos fixes nerve)
+docker compose build --no-cache frontend backend
+
+# 3. Redémarrer
+docker compose up -d
