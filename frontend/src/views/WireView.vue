@@ -36,6 +36,9 @@
           <div v-else class="msgs">
             <article v-for="m in messages" :key="String(m.id)" class="msg">
               <div class="msg-head">
+                <span v-if="m.source === 'dashboard'" class="src-badge" title="Message depuis le dashboard"
+                  >Dashboard</span
+                >
                 <span class="from">{{ labelAgent(m.from_agent_id) }}</span>
                 <span class="arrow">→</span>
                 <span class="to">{{ labelAgent(m.to_agent_id) }}</span>
@@ -48,6 +51,41 @@
               <p class="body">{{ m.body }}</p>
             </article>
           </div>
+          <footer v-if="!msgLoading" class="composer">
+            <p v-if="sendErr" class="err">{{ sendErr }}</p>
+            <div class="row">
+              <label class="lab">
+                <span class="lab-t">Destinataire</span>
+                <select v-model="toAgentId" class="sel" :disabled="sending || !agentsList.length">
+                  <option disabled value="">— Choisir un agent —</option>
+                  <option v-for="a in agentsList" :key="a.id" :value="a.id">
+                    {{ a.emoji }} {{ a.name }} ({{ a.id }})
+                  </option>
+                </select>
+              </label>
+              <label class="nerve-ck">
+                <input v-model="pushNerve" type="checkbox" :disabled="sending" />
+                <span>Ajouter la consigne au Nerve (HEARTBEAT)</span>
+              </label>
+            </div>
+            <div class="row2">
+              <textarea
+                v-model="draft"
+                class="ta"
+                rows="3"
+                placeholder="Message pour l’agent…"
+                :disabled="sending"
+              />
+              <button
+                type="button"
+                class="send"
+                :disabled="sending || !draft.trim() || !toAgentId"
+                @click="sendMessage"
+              >
+                {{ sending ? 'Envoi…' : 'Envoyer' }}
+              </button>
+            </div>
+          </footer>
         </template>
       </main>
     </div>
@@ -55,7 +93,7 @@
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import api from '@/api'
 import AgentsWire from '@/components/AgentsWire.vue'
 
@@ -68,6 +106,12 @@ const wireSource = ref('database')
 const activeId = ref(null)
 const messages = ref([])
 const agentsById = ref({})
+const agentsList = ref([])
+const draft = ref('')
+const toAgentId = ref('')
+const pushNerve = ref(true)
+const sending = ref(false)
+const sendErr = ref('')
 
 const wireDateFmt = new Intl.DateTimeFormat('fr-FR', {
   dateStyle: 'long',
@@ -108,6 +152,7 @@ async function loadConversations() {
     const m = {}
     for (const a of ag.data || []) m[a.id] = a
     agentsById.value = m
+    agentsList.value = ag.data || []
     if (!activeId.value && conversations.value.length) {
       await openConv(conversations.value[0].id)
     }
@@ -122,6 +167,7 @@ async function openConv(id) {
   activeId.value = id
   msgLoading.value = true
   messages.value = []
+  sendErr.value = ''
   try {
     const { data } = await api.get(
       `/api/wire/conversations/${encodeURIComponent(id)}/messages`
@@ -131,6 +177,40 @@ async function openConv(id) {
     messages.value = []
   } finally {
     msgLoading.value = false
+  }
+}
+
+function syncRecipientForActiveConv() {
+  const id = activeId.value
+  const c = conversations.value.find((x) => String(x.id) === String(id))
+  if (c?.agent_key) {
+    toAgentId.value = c.agent_key
+  } else {
+    toAgentId.value = ''
+  }
+}
+
+watch(activeId, () => {
+  syncRecipientForActiveConv()
+})
+
+async function sendMessage() {
+  if (!activeId.value || !toAgentId.value || !draft.value.trim()) return
+  sending.value = true
+  sendErr.value = ''
+  try {
+    await api.post('/api/wire/messages', {
+      body: draft.value.trim(),
+      to_agent_id: toAgentId.value,
+      conversation_id: String(activeId.value),
+      push_to_nerve: pushNerve.value,
+    })
+    draft.value = ''
+    await openConv(activeId.value)
+  } catch (e) {
+    sendErr.value = e.response?.data?.detail || "Envoi impossible."
+  } finally {
+    sending.value = false
   }
 }
 
@@ -291,5 +371,87 @@ onMounted(loadConversations)
   font-size: 0.85rem;
   line-height: 1.5;
   white-space: pre-wrap;
+}
+.src-badge {
+  font-size: 0.58rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--warning, #f59e0b);
+  margin-right: 0.35rem;
+  font-family: var(--font-mono);
+}
+.composer {
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid #ffffff12;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+.composer .row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.75rem 1rem;
+}
+.composer .row2 {
+  display: flex;
+  gap: 0.65rem;
+  align-items: flex-end;
+}
+.lab {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 12rem;
+  flex: 1;
+}
+.lab-t {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+.sel {
+  font: inherit;
+  padding: 0.4rem 0.5rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg, #0a0a0a);
+  color: inherit;
+}
+.nerve-ck {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+}
+.ta {
+  flex: 1;
+  min-height: 4rem;
+  font: inherit;
+  padding: 0.5rem 0.65rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg, #0a0a0a);
+  color: inherit;
+  resize: vertical;
+}
+.send {
+  flex-shrink: 0;
+  padding: 0.55rem 1rem;
+  border-radius: 8px;
+  border: 1px solid #f59e0b55;
+  background: rgba(245, 158, 11, 0.12);
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.send:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 </style>

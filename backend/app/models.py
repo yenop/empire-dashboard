@@ -189,6 +189,8 @@ class WireConversationModel(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     title: Mapped[str] = mapped_column(String(300))
+    # Lien fil OpenClaw (job UUID) pour stocker les messages dashboard → agent en parallèle du .jsonl
+    openclaw_job_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.current_timestamp()
     )
