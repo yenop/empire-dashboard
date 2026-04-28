@@ -3,6 +3,7 @@ from datetime import datetime
 from decimal import Decimal
 
 from sqlalchemy import (
+    JSON,
     Boolean,
     DateTime,
     Enum,
@@ -226,6 +227,20 @@ class PhaseDeliverableModel(Base):
     required: Mapped[bool] = mapped_column(Boolean, default=True)
     checked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     checked_by: Mapped[str | None] = mapped_column(String(100), nullable=True)
+
+
+class NicheProcessStateModel(Base):
+    """Single-row state for « Process recherche de niches » (checklists, scores, handoff)."""
+
+    __tablename__ = "niche_process_state"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        server_default=func.current_timestamp(),
+        onupdate=func.current_timestamp(),
+    )
+    payload: Mapped[dict] = mapped_column(JSON, default=dict)
 
 
 class NerveFileModel(Base):

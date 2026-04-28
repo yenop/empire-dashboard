@@ -25,7 +25,7 @@ const routes = [
       { path: 'briefing', name: 'briefing', component: placeholder, meta: { title: 'Briefing' } },
       { path: 'war-room', name: 'war-room', component: placeholder, meta: { title: 'War Room' } },
       { path: 'decision', name: 'decision', component: placeholder, meta: { title: 'Décision' } },
-      { path: 'process', name: 'process', component: placeholder, meta: { title: 'Process' } },
+      { path: 'process', name: 'process', component: () => import('@/views/ProcessView.vue'), meta: { title: 'Process' } },
       { path: 'niches', name: 'niches', component: placeholder, meta: { title: 'Niches' } },
       { path: 'niche-galaxy', name: 'niche-galaxy', component: placeholder, meta: { title: 'Niche Galaxy' } },
       { path: 'comparator', name: 'comparator', component: placeholder, meta: { title: 'Comparator' } },

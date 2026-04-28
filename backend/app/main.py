@@ -25,12 +25,14 @@ from app.routers import (
     intel,
     mrr,
     nerve,
+    niche_process,
     ops,
     supervision,
     tasks,
     wire,
     workflow,
 )
+from app.niche_process_catalog import default_state_payload
 from app.services.minio_client import ensure_bucket
 from app.services.deliverable_checker import auto_check_deliverables
 from app.services.seed import seed_empire_extensions, seed_if_empty
@@ -65,6 +67,14 @@ async def lifespan(_app: FastAPI):
     with SessionLocal() as db:
         seed_if_empty(db)
         seed_empire_extensions(db)
+        if not db.get(models.NicheProcessStateModel, 1):
+            db.add(
+                models.NicheProcessStateModel(
+                    id=1,
+                    payload=default_state_payload(),
+                )
+            )
+            db.commit()
         st = db.get(models.WorkflowStateModel, 1)
         if st:
             auto_check_deliverables(db, max(1, min(10, st.phase)))
@@ -108,6 +118,7 @@ app.include_router(intel.router)
 app.include_router(mrr.router)
 app.include_router(supervision.router)
 app.include_router(workflow.router)
+app.include_router(niche_process.router)
 app.include_router(nerve.router)
 app.include_router(wire.router)
 app.include_router(ops.router)

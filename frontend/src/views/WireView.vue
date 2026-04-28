@@ -117,8 +117,11 @@
 
 <script setup>
 import { onMounted, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import api from '@/api'
 import AgentsWire from '@/components/AgentsWire.vue'
+
+const route = useRoute()
 
 const loading = ref(true)
 const msgLoading = ref(false)
@@ -256,6 +259,17 @@ function syncRecipientForActiveConv() {
 watch(activeId, () => {
   syncRecipientForActiveConv()
 })
+
+watch(
+  () => ({ agentQ: route.query.agent, agents: agentsById.value }),
+  () => {
+    const ag = route.query.agent
+    if (typeof ag === 'string' && agentsById.value[ag]) {
+      toAgentId.value = ag
+    }
+  },
+  { immediate: true }
+)
 
 async function sendMessage() {
   if (!activeId.value || !toAgentId.value || !draft.value.trim()) return

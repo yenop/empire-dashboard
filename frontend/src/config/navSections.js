@@ -27,7 +27,7 @@ export const NAV_SECTIONS = [
     defaultOpen: true,
     items: [
       { routeName: 'decision', label: 'Décision', icon: 'star', labelEmoji: '🏆', placeholder: true },
-      { routeName: 'process', label: 'Process', icon: 'book', placeholder: true },
+      { routeName: 'process', label: 'Process', icon: 'book', placeholder: false },
       { routeName: 'niches', label: 'Niches', icon: 'target', placeholder: true },
       { routeName: 'niche-galaxy', label: 'Niche Galaxy', icon: 'globe', placeholder: true },
       { routeName: 'comparator', label: 'Comparator', icon: 'balance', placeholder: true },
