@@ -118,6 +118,15 @@
                     <span>Ajouter la consigne au Nerve (HEARTBEAT)</span>
                   </label>
                 </div>
+                <div v-if="processNicheOtherRelay" class="row">
+                  <label class="nerve-ck">
+                    <input v-model="relayProcessNiche" type="checkbox" :disabled="sending" />
+                    <span>
+                      Également envoyer au fil Process niche (vers
+                      {{ processNicheOtherRelay.label }})
+                    </span>
+                  </label>
+                </div>
                 <div class="row2">
                   <textarea
                     v-model="draft"
@@ -247,7 +256,7 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import api from '@/api'
 import AgentsWire from '@/components/AgentsWire.vue'
@@ -296,6 +305,26 @@ const pushNerve = ref(true)
 const sending = ref(false)
 const sendErr = ref('')
 const statusErr = ref('')
+
+const nicheProcessWire = reactive({
+  marlene: '',
+  gaston: '',
+})
+const relayProcessNiche = ref(false)
+
+const processNicheOtherRelay = computed(() => {
+  const ml = nicheProcessWire.marlene
+  const ga = nicheProcessWire.gaston
+  const aid = String(activeId.value ?? '')
+  if (!ml || !ga || !aid) return null
+  if (aid === String(ml)) {
+    return { conversation_id: ga, to_agent_id: 'gaston', label: 'Gaston' }
+  }
+  if (aid === String(ga)) {
+    return { conversation_id: ml, to_agent_id: 'marlene', label: 'Marlène' }
+  }
+  return null
+})
 
 const filteredConversations = computed(() => {
   let list = conversations.value
@@ -475,6 +504,18 @@ async function setMessageStatus(m, st) {
   }
 }
 
+async function refreshNicheProcessWireIds() {
+  try {
+    const { data } = await api.get('/api/niche-process')
+    const w = data.state?.wire || {}
+    nicheProcessWire.marlene = String(w.marlene_conversation_id || '').trim()
+    nicheProcessWire.gaston = String(w.gaston_conversation_id || '').trim()
+  } catch {
+    nicheProcessWire.marlene = ''
+    nicheProcessWire.gaston = ''
+  }
+}
+
 async function loadConversations() {
   loading.value = true
   err.value = ''
@@ -483,6 +524,7 @@ async function loadConversations() {
       api.get('/api/wire/conversations', { params: { limit: 100, offset: 0 } }),
       api.get('/api/agents'),
     ])
+    await refreshNicheProcessWireIds()
     conversations.value = w.data.items || []
     total.value = w.data.total || 0
     wireSource.value = w.data.source || 'database'
@@ -569,6 +611,7 @@ function syncRecipientForActiveConv() {
 }
 
 watch(activeId, () => {
+  relayProcessNiche.value = false
   syncRecipientForActiveConv()
 })
 
@@ -599,13 +642,31 @@ async function sendMessage() {
   if (!activeId.value || !toAgentId.value || !draft.value.trim()) return
   sending.value = true
   sendErr.value = ''
+  const bodyText = draft.value.trim()
   try {
     await api.post('/api/wire/messages', {
-      body: draft.value.trim(),
+      body: bodyText,
       to_agent_id: toAgentId.value,
       conversation_id: String(activeId.value),
       push_to_nerve: pushNerve.value,
     })
+    const other = processNicheOtherRelay.value
+    if (relayProcessNiche.value && other) {
+      try {
+        await api.post('/api/wire/messages', {
+          body: bodyText,
+          to_agent_id: other.to_agent_id,
+          conversation_id: String(other.conversation_id),
+          push_to_nerve: pushNerve.value,
+        })
+      } catch (e2) {
+        sendErr.value =
+          e2.response?.data?.detail ||
+          'Relais Process niche : envoi vers l’autre fil a échoué.'
+        await openConv(activeId.value)
+        return
+      }
+    }
     draft.value = ''
     await openConv(activeId.value)
   } catch (e) {

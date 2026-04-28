@@ -1,5 +1,4 @@
 from typing import Literal
-from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
@@ -16,7 +15,12 @@ from app.models import (
     WireMessageStatus,
 )
 from app.services import openclaw_cron as oc
-from app.services.openclaw_wire_db import get_or_create_openclaw_conversation
+from app.services.wire_messages import (
+    WireConversationNotFound,
+    WireMessageError,
+    fetch_messages_for_conversation,
+    post_dashboard_message,
+)
 from app.services.wire_outbound import append_nerve_note
 
 router = APIRouter(prefix="/api/wire", tags=["wire"])
@@ -40,52 +44,6 @@ def _pole_agent_id_for_message(m: WireMessageModel | None) -> str | None:
     if m.from_agent_id == "dashboard" and m.to_agent_id and not _is_broadcast_to(m.to_agent_id):
         return m.to_agent_id
     return None
-
-
-def _db_messages_for_openclaw_job(db: Session, job_id: str) -> list[dict]:
-    jid = oc.norm_uuid(job_id)
-    if not jid:
-        return []
-    conv = db.scalars(
-        select(WireConversationModel).where(WireConversationModel.openclaw_job_id == jid)
-    ).first()
-    if not conv:
-        return []
-    msgs = db.scalars(
-        select(WireMessageModel)
-        .where(WireMessageModel.conversation_id == conv.id)
-        .order_by(WireMessageModel.created_at.desc(), WireMessageModel.id.desc())
-    ).all()
-    return [
-        {
-            "id": f"db-{m.id}",
-            "from_agent_id": m.from_agent_id,
-            "to_agent_id": m.to_agent_id,
-            "body": m.body,
-            "created_at": m.created_at.isoformat() if m.created_at else None,
-            "source": "dashboard",
-            "meta": None,
-            "human_status": m.human_status.value,
-            "ack_at": m.ack_at.isoformat() if m.ack_at else None,
-            "applied_at": m.applied_at.isoformat() if m.applied_at else None,
-        }
-        for m in msgs
-    ]
-
-
-def _wire_timeline_sort_key(item: dict) -> float:
-    raw = item.get("created_at")
-    if not raw:
-        return 0.0
-    return oc._parse_ts_sort_key(str(raw))
-
-
-def _merge_openclaw_and_db_messages(
-    oc_list: list[dict], db_list: list[dict]
-) -> list[dict]:
-    merged = oc_list + db_list
-    merged.sort(key=_wire_timeline_sort_key, reverse=True)
-    return merged
 
 
 @router.get("/conversations")
@@ -232,46 +190,10 @@ def list_messages(
     _username: str = Depends(get_current_username),
     db: Session = Depends(get_db),
 ) -> list[dict]:
-    oc_list = oc.wire_messages_for_job(conv_id)
-    if oc_list is not None:
-        db_extra = _db_messages_for_openclaw_job(db, conv_id)
-        if db_extra:
-            return _merge_openclaw_and_db_messages(oc_list, db_extra)
-        return oc_list
-
     try:
-        conv_id_int = int(conv_id)
-    except ValueError as e:
-        raise HTTPException(
-            status.HTTP_404_NOT_FOUND,
-            detail="Conversation introuvable (id OpenClaw ou numérique attendu)",
-        ) from e
-    conv = db.get(WireConversationModel, conv_id_int)
-    if not conv:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Conversation introuvable")
-    msgs = db.scalars(
-        select(WireMessageModel)
-        .where(WireMessageModel.conversation_id == conv_id_int)
-        .order_by(
-            WireMessageModel.created_at.desc(),
-            WireMessageModel.id.desc(),
-        )
-    ).all()
-    return [
-        {
-            "id": m.id,
-            "from_agent_id": m.from_agent_id,
-            "to_agent_id": m.to_agent_id,
-            "body": m.body,
-            "created_at": m.created_at.isoformat() if m.created_at else None,
-            "source": "database",
-            "meta": None,
-            "human_status": m.human_status.value,
-            "ack_at": m.ack_at.isoformat() if m.ack_at else None,
-            "applied_at": m.applied_at.isoformat() if m.applied_at else None,
-        }
-        for m in msgs
-    ]
+        return fetch_messages_for_conversation(db, conv_id)
+    except WireConversationNotFound as e:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail=e.detail) from e
 
 
 class WireCreateConversationBody(BaseModel):
@@ -314,80 +236,18 @@ def post_wire_message(
     _username: str = Depends(get_current_username),
     db: Session = Depends(get_db),
 ) -> dict:
-    if not db.get(AgentModel, payload.to_agent_id):
-        raise HTTPException(
-            status.HTTP_404_NOT_FOUND, detail="Agent destinataire introuvable"
-        )
-
-    oc_volume = oc.oc_root().exists() and oc.oc_root().is_dir()
-    conv_raw = payload.conversation_id.strip()
-    conv: WireConversationModel | None = None
-
     try:
-        conv_num = int(conv_raw)
-    except ValueError:
-        conv_num = None
-
-    if conv_num is not None:
-        conv = db.get(WireConversationModel, conv_num)
-        if not conv:
-            raise HTTPException(
-                status.HTTP_404_NOT_FOUND, detail="Conversation introuvable"
-            )
-    else:
-        jid = oc.norm_uuid(conv_raw)
-        try:
-            UUID(conv_raw)
-        except ValueError as e:
-            raise HTTPException(
-                status.HTTP_400_BAD_REQUEST,
-                detail="conversation_id doit être un entier ou un UUID de job OpenClaw",
-            ) from e
-        if not jid:
-            raise HTTPException(
-                status.HTTP_400_BAD_REQUEST, detail="UUID conversation invalide"
-            )
-        if not oc_volume:
-            raise HTTPException(
-                status.HTTP_400_BAD_REQUEST,
-                detail="Volume OpenClaw non monté — utilisez l’id numérique de conversation",
-            )
-        dash = oc.dashboard_agent_id_for_job(jid)
-        if dash and dash != payload.to_agent_id:
-            raise HTTPException(
-                status.HTTP_400_BAD_REQUEST,
-                detail="L’agent ne correspond pas à ce fil OpenClaw",
-            )
-        conv = get_or_create_openclaw_conversation(db, jid)
-
-    msg = WireMessageModel(
-        conversation_id=conv.id,
-        from_agent_id="dashboard",
-        to_agent_id=payload.to_agent_id,
-        body=payload.body.strip(),
-    )
-    db.add(msg)
-    db.commit()
-    db.refresh(msg)
-
-    nerve_ok = False
-    nerve_err: str | None = None
-    if payload.push_to_nerve:
-        nerve_ok, nerve_err = append_nerve_note(
+        return post_dashboard_message(
             db,
-            payload.to_agent_id,
-            payload.body,
-            message_id=msg.id,
-            human_status="sent",
+            body=payload.body,
+            to_agent_id=payload.to_agent_id,
+            conversation_id=payload.conversation_id,
+            push_to_nerve=payload.push_to_nerve,
         )
-
-    return {
-        "ok": True,
-        "message_id": msg.id,
-        "conversation_id": conv.id,
-        "nerve_appended": nerve_ok,
-        "nerve_error": nerve_err,
-    }
+    except WireConversationNotFound as e:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail=e.detail) from e
+    except WireMessageError as e:
+        raise HTTPException(e.status_code, detail=e.detail) from e
 
 
 class WireStatusBody(BaseModel):
