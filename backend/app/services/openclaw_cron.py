@@ -10,10 +10,11 @@ from uuid import UUID
 
 from app.config import get_settings
 
-# Liens agent interne → job OpenClaw. Mettre à jour "gaston" quand le cron sera créé.
+# Liens fil OpenClaw (key) → agent dashboard (`agents.id`). Mettre à jour jobId "gaston" quand le cron existera.
 AGENTS_MAP: list[dict[str, Any]] = [
     {
         "key": "marlene",
+        "dashboard_agent_id": "marlene",
         "jobId": "fdfb0543-81a7-4eb7-86c7-9eaf7b1f5378",
         "name": "Marlène",
         "label": "Recherche niches",
@@ -21,6 +22,7 @@ AGENTS_MAP: list[dict[str, Any]] = [
     },
     {
         "key": "gaston",
+        "dashboard_agent_id": "gaston",
         "jobId": "",
         "name": "Gaston",
         "label": "Analyse SEO",
@@ -28,6 +30,7 @@ AGENTS_MAP: list[dict[str, Any]] = [
     },
     {
         "key": "marcel_x",
+        "dashboard_agent_id": "marcel",
         "jobId": "5d4ed714-2ba8-40be-becb-fa4670b92f97",
         "name": "Marcel",
         "label": "Veille X ecom",
@@ -35,6 +38,7 @@ AGENTS_MAP: list[dict[str, Any]] = [
     },
     {
         "key": "marcel_yt",
+        "dashboard_agent_id": "marcel",
         "jobId": "d415271f-e72c-4986-8b3c-f5d57615a8e6",
         "name": "Marcel",
         "label": "Veille YouTube",
@@ -42,6 +46,7 @@ AGENTS_MAP: list[dict[str, Any]] = [
     },
     {
         "key": "edith_intel",
+        "dashboard_agent_id": "edith",
         "jobId": "3e203c26-b452-47fc-b8fb-ff0c2df2bb41",
         "name": "Édith",
         "label": "Synthèse Intel",
@@ -49,6 +54,7 @@ AGENTS_MAP: list[dict[str, Any]] = [
     },
     {
         "key": "edith_pod",
+        "dashboard_agent_id": "edith",
         "jobId": "5782f709-a956-4326-aa89-cf0f827b747b",
         "name": "Édith",
         "label": "Veille POD X",
@@ -56,6 +62,7 @@ AGENTS_MAP: list[dict[str, Any]] = [
     },
     {
         "key": "yvon",
+        "dashboard_agent_id": "yvon",
         "jobId": "2b2ba93c-032b-4ff1-aed7-e3f1593cd952",
         "name": "Yvon",
         "label": "Carte blanche nuit",
@@ -204,6 +211,30 @@ def spec_for_job_id(jid: str) -> dict[str, Any] | None:
     for s in AGENTS_MAP:
         if norm_uuid(str(s.get("jobId", ""))) == jid:
             return s
+    return None
+
+
+def dashboard_agent_id_for_job(jid: str) -> str | None:
+    spec = spec_for_job_id(jid)
+    if not spec:
+        return None
+    dash = spec.get("dashboard_agent_id")
+    if isinstance(dash, str) and dash.strip():
+        return dash.strip()
+    key = spec.get("key")
+    if isinstance(key, str) and key.strip():
+        return key.strip()
+    return None
+
+
+def first_openclaw_job_id_for_dashboard_agent(dashboard_agent_id: str) -> str | None:
+    """Premier job OpenClaw avec UUID non vide pour cet `agents.id` (ordre AGENTS_MAP)."""
+    for s in AGENTS_MAP:
+        if str(s.get("dashboard_agent_id", "")) != dashboard_agent_id:
+            continue
+        jid = norm_uuid(str(s.get("jobId", "")))
+        if jid:
+            return jid
     return None
 
 

@@ -69,6 +69,10 @@ class TaskCreate(BaseModel):
     app_id: str | None = None
     status: str = "todo"
     priority: str = "medium"
+    notify_wire: bool = Field(
+        default=False,
+        description="Si True et agent_id défini, envoie un message Wire sur le premier job OpenClaw mappé.",
+    )
 
 
 class TaskUpdate(BaseModel):

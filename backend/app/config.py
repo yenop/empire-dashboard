@@ -22,6 +22,8 @@ class Settings(BaseSettings):
     empire_password_hash: str = ""
     empire_jwt_secret: str = "dev-only-change-in-production-min-32-chars!!"
     empire_jwt_expire_minutes: int = 15
+    # Si non vide, `POST /api/internal/tasks` accepte le header `X-Empire-Internal-Key` égal à cette valeur.
+    empire_internal_api_key: str = ""
 
     openclaw_gateway_url: str = ""
     openclaw_gateway_token: str = ""

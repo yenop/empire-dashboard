@@ -10,7 +10,21 @@ from app import models  # noqa: F401
 from app.database import Base, SessionLocal, engine
 from app.db_schema import ensure_wire_conversations_openclaw_column
 from app.limiter import limiter
-from app.routers import agents, apps, auth, dashboard, intel, mrr, nerve, ops, supervision, tasks, wire, workflow
+from app.routers import (
+    agents,
+    apps,
+    auth,
+    dashboard,
+    internal_tasks,
+    intel,
+    mrr,
+    nerve,
+    ops,
+    supervision,
+    tasks,
+    wire,
+    workflow,
+)
 from app.services.minio_client import ensure_bucket
 from app.services.seed import seed_empire_extensions, seed_if_empty
 
@@ -47,6 +61,7 @@ app.add_middleware(
 )
 
 app.include_router(auth.router)
+app.include_router(internal_tasks.router)
 app.include_router(dashboard.router)
 app.include_router(agents.router)
 app.include_router(apps.router)

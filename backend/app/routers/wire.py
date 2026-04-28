@@ -10,16 +10,10 @@ from app.database import get_db
 from app.deps import get_current_username
 from app.models import AgentModel, WireConversationModel, WireMessageModel
 from app.services import openclaw_cron as oc
+from app.services.openclaw_wire_db import get_or_create_openclaw_conversation
 from app.services.wire_outbound import append_nerve_note
 
 router = APIRouter(prefix="/api/wire", tags=["wire"])
-
-
-def _title_for_openclaw_job(jid: str) -> str:
-    spec = oc.spec_for_job_id(jid)
-    if spec:
-        return f"{spec['name']} — {spec['label']}"
-    return f"OpenClaw job {jid[:8]}…"
 
 
 def _db_messages_for_openclaw_job(db: Session, job_id: str) -> list[dict]:
@@ -179,23 +173,6 @@ class WireOutboundPayload(BaseModel):
     push_to_nerve: bool = True
 
 
-def _get_or_create_openclaw_conversation(db: Session, job_id: str) -> WireConversationModel:
-    jid = oc.norm_uuid(job_id)
-    if not jid:
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST, detail="conversation_id OpenClaw invalide"
-        )
-    conv = db.scalars(
-        select(WireConversationModel).where(WireConversationModel.openclaw_job_id == jid)
-    ).first()
-    if conv:
-        return conv
-    conv = WireConversationModel(title=_title_for_openclaw_job(jid), openclaw_job_id=jid)
-    db.add(conv)
-    db.flush()
-    return conv
-
-
 @router.post("/messages")
 def post_wire_message(
     payload: WireOutboundPayload,
@@ -240,13 +217,13 @@ def post_wire_message(
                 status.HTTP_400_BAD_REQUEST,
                 detail="Volume OpenClaw non monté — utilisez l’id numérique de conversation",
             )
-        spec = oc.spec_for_job_id(jid)
-        if spec and spec.get("key") and spec["key"] != payload.to_agent_id:
+        dash = oc.dashboard_agent_id_for_job(jid)
+        if dash and dash != payload.to_agent_id:
             raise HTTPException(
                 status.HTTP_400_BAD_REQUEST,
                 detail="L’agent ne correspond pas à ce fil OpenClaw",
             )
-        conv = _get_or_create_openclaw_conversation(db, jid)
+        conv = get_or_create_openclaw_conversation(db, jid)
 
     msg = WireMessageModel(
         conversation_id=conv.id,

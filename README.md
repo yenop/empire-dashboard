@@ -131,6 +131,8 @@ docker compose down && docker compose up -d --build
 cd /home/ubuntu/.openclaw/workspace/orchestratorTrendTiktok
 docker compose up -d --build nginx
 
+docker exec <nom_container_nginx> nginx -s reload
+
 
 # Réactiver tous les crons
 openclaw cron enable fdfb0543-81a7-4eb7-86c7-9eaf7b1f5378  # Marlène
@@ -139,3 +141,11 @@ openclaw cron enable d415271f-e72c-4986-8b3c-f5d57615a8e6  # Marcel YT
 openclaw cron enable 3e203c26-b452-47fc-b8fb-ff0c2df2bb41  # Édith Intel
 openclaw cron enable 5782f709-a956-4326-aa89-cf0f827b747b  # Édith POD
 openclaw cron enable 2b2ba93c-032b-4ff1-aed7-e3f1593cd952  # Yvon
+
+
+ubuntu@vps-8b89efa9:~$ docker ps | grep nginx
+2d2411a08100   nginx:1.25-alpine                     "/docker-entrypoint.…"   38 hours ago    Up 38 hours                     0.0.0.0:80->80/tcp, [::]:80->80/tcp, 0.0.0.0:443->443/tcp, [::]:443->443/tcp, 0.0.0.0:8082->80/tcp, [::]:8082->80/tcp   orchestrator_nginx
+920918d269a4   community-radar-nginx                 "/docker-entrypoint.…"   5 weeks ago     Up 2 weeks                      0.0.0.0:8090->80/tcp, [::]:8090->80/tcp                                                                                 community_radar_nginx
+99ba4fddfdbb   tiktok-workflow-manager-nginx-proxy   "/docker-entrypoint.…"   5 weeks ago     Up 2 weeks (unhealthy)          0.0.0.0:8083->80/tcp, [::]:8083->80/tcp                                                                                 tiktok-workflow-manager-nginx-proxy-1
+5b88e93bedbe   testfactory-emi-nginx                 "/docker-entrypoint.…"   5 weeks ago     Up 2 weeks                      0.0.0.0:81->80/tcp, [::]:81->80/tcp                                                                                     emi-nginx
+ubuntu@vps-8b89efa9:~$ docker exec orchestrator_nginx nginx -s reload

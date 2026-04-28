@@ -1,5 +1,5 @@
 import jwt
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, Header, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.config import get_settings
@@ -33,4 +33,22 @@ def get_current_username(
         raise HTTPException(
             status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired token",
+        )
+
+
+def require_internal_api_key(
+    x_empire_internal_key: str | None = Header(default=None, alias="X-Empire-Internal-Key"),
+) -> None:
+    settings = get_settings()
+    expected = (settings.empire_internal_api_key or "").strip()
+    if not expected:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Internal API key not configured",
+        )
+    got = (x_empire_internal_key or "").strip()
+    if not got or got != expected:
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid internal API key",
         )
