@@ -37,6 +37,18 @@ Sur la même machine ou un réseau privé, le gateway OpenClaw peut rester sur u
 
 Le dashboard appelle `GET {OPENCLAW_GATEWAY_URL}/api/status` via la route agrégée `GET /api/supervision/openclaw` (authentification JWT requise).
 
+### Nerve center ↔ fichiers OpenClaw sur disque
+
+Par défaut, l’écran **Nerve** lit/écrit la table `nerve_files` (MariaDB). Pour utiliser les vrais `IDENTITY.md`, `SOUL.md`, `MEMORY.md`, etc. sous le répertoire monté en `OPENCLAW_DIR` :
+
+1. Dans `.env` du serveur, définir **`OPENCLAW_HOST_PATH=/home/ubuntu/.openclaw`** (ou le chemin réel du répertoire OpenClaw sur l’hôte). Sans cette ligne, Compose utilise par défaut `./.docker-openclaw` dans le clone du dépôt, ce qui convient au dev local mais pas au VPS. Monter avec accès **lecture-écriture** (pas de `:ro`) pour l’enregistrement Nerve depuis l’UI.
+2. Dans `.env` :
+   - `NERVE_STORAGE=filesystem`
+   - `OPENCLAW_NERVE_AGENT_PATHS` : JSON `{"<agent_id_dashboard>":"chemin/relatif/sous/openclaw"}`, par ex. `{"marlene":"workspace/marlene-cron"}`.
+   - Optionnel : `OPENCLAW_NERVE_PATH_TEMPLATE=workspace/{agent_id}` pour les agents absents de la carte (chemins relatifs, sans `..`).
+
+Sécurité : en mode `filesystem`, le conteneur **backend** peut modifier les fichiers sous ce volume ; ne montez que le périmètre OpenClaw nécessaire et gardez l’API derrière auth JWT comme aujourd’hui.
+
 ## Sauvegardes
 
 Les données MariaDB et MinIO sont dans des **volumes Docker nommés** (`mariadb_data`, `minio_data`), préfixés par le nom du projet Compose (voir `docker volume ls`).

@@ -26,6 +26,14 @@ class Settings(BaseSettings):
     openclaw_gateway_url: str = ""
     openclaw_gateway_token: str = ""
     openclaw_dir: str = "/openclaw-data"
+
+    # Nerve center: "database" (nerve_files table) or "filesystem" (.md under openclaw_dir)
+    nerve_storage: str = "database"
+    # JSON map agent_id -> path relative to openclaw_dir, e.g. {"marlene":"workspace/marlene-job"}
+    openclaw_nerve_agent_paths: str = ""
+    # Fallback if agent_id absent from map: relative path with {agent_id}, e.g. "workspace/{agent_id}"
+    openclaw_nerve_path_template: str = ""
+
     @property
     def database_url(self) -> str:
         return (

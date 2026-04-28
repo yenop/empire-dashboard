@@ -28,7 +28,8 @@ services:
       MINIO_BUCKET: empire
       OPENCLAW_DIR: /openclaw-data
     volumes:
-      - /home/ubuntu/.openclaw:/openclaw-data:ro
+      # Chemin hôte : défaut = dossier du projet (macOS / Docker Desktop). Sur le VPS : OPENCLAW_HOST_PATH=/home/ubuntu/.openclaw dans .env
+      - ${OPENCLAW_HOST_PATH:-./.docker-openclaw}:/openclaw-data
     depends_on:
       mariadb:
         condition: service_healthy

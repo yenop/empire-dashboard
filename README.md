@@ -130,3 +130,12 @@ docker compose down && docker compose up -d --build
 # 2. Rebuild orchestrator_nginx
 cd /home/ubuntu/.openclaw/workspace/orchestratorTrendTiktok
 docker compose up -d --build nginx
+
+
+# Réactiver tous les crons
+openclaw cron enable fdfb0543-81a7-4eb7-86c7-9eaf7b1f5378  # Marlène
+openclaw cron enable 5d4ed714-2ba8-40be-becb-fa4670b92f97  # Marcel X
+openclaw cron enable d415271f-e72c-4986-8b3c-f5d57615a8e6  # Marcel YT
+openclaw cron enable 3e203c26-b452-47fc-b8fb-ff0c2df2bb41  # Édith Intel
+openclaw cron enable 5782f709-a956-4326-aa89-cf0f827b747b  # Édith POD
+openclaw cron enable 2b2ba93c-032b-4ff1-aed7-e3f1593cd952  # Yvon

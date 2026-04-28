@@ -5,6 +5,7 @@
       <p class="sub">
         IDENTITY, SOUL, MEMORY, AGENTS, HEARTBEAT : mémoire et contrat éditable en direct (couche nerveuse OpenClaw).
       </p>
+      <p v-if="sourceLabel" class="source">{{ sourceLabel }}</p>
     </header>
     <div v-if="loading" class="muted">Chargement…</div>
     <div v-else-if="err" class="err">{{ err }}</div>
@@ -58,14 +59,17 @@ const agentId = ref('')
 const slug = ref('identity')
 const content = ref('')
 const savedOk = ref(false)
+const sourceLabel = ref('')
 
 async function loadMeta() {
-  const [ag, sg] = await Promise.all([
+  const [ag, sg, meta] = await Promise.all([
     api.get('/api/nerve/agents'),
     api.get('/api/nerve/slugs'),
+    api.get('/api/nerve/meta').catch(() => ({ data: null })),
   ])
   agents.value = ag.data || []
   slugs.value = sg.data || []
+  sourceLabel.value = meta.data?.source_label || ''
   if (!agentId.value && agents.value.length) {
     agentId.value = agents.value[0].id
   }
@@ -138,6 +142,12 @@ onMounted(async () => {
   color: var(--text-muted);
   max-width: 44rem;
   line-height: 1.45;
+}
+.source {
+  margin: 0.25rem 0 0;
+  font-size: 0.72rem;
+  font-family: var(--font-mono);
+  color: var(--accent);
 }
 .muted,
 .err {
