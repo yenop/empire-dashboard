@@ -258,10 +258,6 @@ def default_state_payload() -> dict[str, Any]:
             "gaston_verdict": "",
             "nicolas_decision": "",
         },
-        "wire": {
-            "marlene_conversation_id": None,
-            "gaston_conversation_id": None,
-        },
     }
 
 

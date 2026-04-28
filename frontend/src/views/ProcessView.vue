@@ -16,49 +16,6 @@
 
       <ProcessPipeline :pipeline="payload.pipeline" />
 
-      <section class="wire-setup card">
-        <h4 class="wire-setup-title">Fils Wire (IDs conversation)</h4>
-        <p class="wire-setup-desc">
-          Tu dialogues d’abord avec <strong>Marlène</strong> sur Wire, puis tu enchaînes avec <strong>Gaston</strong>
-          (deux fils distincts). Copie chaque identifiant depuis la page Wire (numéro ou UUID OpenClaw), enregistre
-          au blur : cette page fusionne la <strong>lecture</strong> des deux fils pour suivre l’historique. Les
-          envois se font depuis Wire ou les liens « Ouvrir le Wire » ci-dessous — pas d’envoi groupé ici.
-        </p>
-        <div class="wire-setup-row">
-          <label class="wire-lab">
-            <span class="wire-lab-t">Fil Marlène</span>
-            <input
-              v-model="wireIdsLocal.marlene"
-              type="text"
-              class="wire-inp"
-              placeholder="ex. 12 ou uuid du job"
-              maxlength="120"
-              @blur="saveWireIds"
-            />
-          </label>
-          <label class="wire-lab">
-            <span class="wire-lab-t">Fil Gaston</span>
-            <input
-              v-model="wireIdsLocal.gaston"
-              type="text"
-              class="wire-inp"
-              placeholder="ex. 13 ou uuid du job"
-              maxlength="120"
-              @blur="saveWireIds"
-            />
-          </label>
-        </div>
-      </section>
-
-      <ProcessWireFeed
-        :items="wireFeed.items"
-        :warnings="wireFeed.warnings"
-        :configured="wireFeed.configured"
-        :loading="wireFeed.loading"
-        :err="wireFeed.err"
-        @refresh="loadWireFeed"
-      />
-
       <div class="pills" role="tablist" aria-label="Agent">
         <button
           type="button"
@@ -200,13 +157,12 @@
 </template>
 
 <script setup>
-import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import api from '@/api'
 import ProcessPipeline from '@/components/process/ProcessPipeline.vue'
 import ProcessChecklist from '@/components/process/ProcessChecklist.vue'
 import ProcessScoringPanel from '@/components/process/ProcessScoringPanel.vue'
 import ProcessRedFlags from '@/components/process/ProcessRedFlags.vue'
-import ProcessWireFeed from '@/components/process/ProcessWireFeed.vue'
 
 const loading = ref(true)
 const err = ref('')
@@ -226,7 +182,6 @@ const state = reactive({
   scores_seo: {},
   red_flags: {},
   notes: {},
-  wire: { marlene_conversation_id: null, gaston_conversation_id: null },
 })
 
 const computedScores = ref(null)
@@ -238,21 +193,6 @@ const notesLocal = reactive({
 })
 
 const handoffText = ref('')
-
-const wireIdsLocal = reactive({
-  marlene: '',
-  gaston: '',
-})
-
-const wireFeed = reactive({
-  items: [],
-  warnings: [],
-  configured: { marlene: false, gaston: false },
-  loading: false,
-  err: '',
-})
-
-let wirePollTimer = null
 
 const identityKwPreview = computed(() => (state.handoff?.identity_keywords || '').trim())
 
@@ -268,9 +208,6 @@ function assignPayload(data) {
   notesLocal.gaston_verdict = n.gaston_verdict ?? ''
   notesLocal.nicolas_decision = n.nicolas_decision ?? ''
   handoffText.value = state.handoff?.identity_keywords ?? ''
-  const w = state.wire || {}
-  wireIdsLocal.marlene = w.marlene_conversation_id ?? ''
-  wireIdsLocal.gaston = w.gaston_conversation_id ?? ''
 }
 
 async function load() {
@@ -278,45 +215,11 @@ async function load() {
   try {
     const { data } = await api.get('/api/niche-process')
     assignPayload(data)
-    await loadWireFeed()
   } catch (e) {
     err.value = e.response?.data?.detail || 'Impossible de charger le process.'
   } finally {
     loading.value = false
   }
-}
-
-async function loadWireFeed() {
-  wireFeed.loading = true
-  wireFeed.err = ''
-  try {
-    const { data } = await api.get('/api/niche-process/wire-feed')
-    wireFeed.items = data.items || []
-    wireFeed.warnings = data.warnings || []
-    wireFeed.configured = data.configured || { marlene: false, gaston: false }
-  } catch (e) {
-    wireFeed.err = e.response?.data?.detail || 'Flux Wire indisponible.'
-    wireFeed.items = []
-    wireFeed.warnings = []
-  } finally {
-    wireFeed.loading = false
-  }
-}
-
-async function saveWireIds() {
-  const sw = state.wire || {}
-  const prevM = (sw.marlene_conversation_id ?? '').trim()
-  const prevG = (sw.gaston_conversation_id ?? '').trim()
-  const m = wireIdsLocal.marlene.trim()
-  const g = wireIdsLocal.gaston.trim()
-  if (m === prevM && g === prevG) return
-  await patch({
-    wire: {
-      marlene_conversation_id: m || null,
-      gaston_conversation_id: g || null,
-    },
-  })
-  await loadWireFeed()
 }
 
 async function patch(body) {
@@ -379,14 +282,7 @@ watch(tab, () => {
   err.value = ''
 })
 
-onMounted(() => {
-  load()
-  wirePollTimer = setInterval(loadWireFeed, 20_000)
-})
-
-onUnmounted(() => {
-  if (wirePollTimer) clearInterval(wirePollTimer)
-})
+onMounted(load)
 </script>
 
 <style scoped>
@@ -530,46 +426,5 @@ onUnmounted(() => {
   font-size: 0.72rem;
   color: var(--text-muted);
   font-family: var(--font-mono);
-}
-.wire-setup-title {
-  margin: 0 0 0.35rem;
-  font-size: 0.95rem;
-}
-.wire-setup-desc {
-  margin: 0 0 0.75rem;
-  font-size: 0.78rem;
-  color: var(--text-muted);
-  line-height: 1.45;
-}
-.wire-setup-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.75rem;
-}
-@media (max-width: 640px) {
-  .wire-setup-row {
-    grid-template-columns: 1fr;
-  }
-}
-.wire-lab {
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
-}
-.wire-lab-t {
-  font-size: 0.72rem;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-.wire-inp {
-  width: 100%;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 0.45rem 0.55rem;
-  color: var(--text);
-  font: inherit;
-  font-size: 0.85rem;
 }
 </style>
