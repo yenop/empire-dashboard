@@ -2,11 +2,22 @@
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from fastapi import HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
-from app.models import AgentModel, AppModel, TaskModel, TaskPriority, TaskStatus, WireMessageModel
+from app.models import (
+    AgentModel,
+    AppModel,
+    IntelModel,
+    IntelStatus,
+    TaskModel,
+    TaskPriority,
+    TaskStatus,
+    WireMessageModel,
+)
 from app.schemas import TaskCreate, TaskOut, TaskUpdate
 from app.services import openclaw_cron as oc
 from app.services.openclaw_wire_db import get_or_create_openclaw_conversation
@@ -156,6 +167,16 @@ def apply_task_update(db: Session, t: TaskModel, body: TaskUpdate) -> TaskModel:
         t.app_id = ap
     recount_agent_tasks(db, old_agent)
     recount_agent_tasks(db, t.agent_id)
+
+    if "status" in patch and t.intel_item_id:
+        intel = db.get(IntelModel, t.intel_item_id)
+        if intel:
+            if t.status == TaskStatus.inprogress:
+                intel.status = IntelStatus.implementing
+            elif t.status == TaskStatus.done:
+                intel.status = IntelStatus.implemented
+                intel.implemented_at = datetime.now(timezone.utc)
+
     db.commit()
     return load_task_with_relations(db, t.id)
 

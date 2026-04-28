@@ -88,22 +88,45 @@ class IntelItemOut(BaseModel):
     title: str
     source: str
     type: str
+    category: str  # alias UX (= type)
     score: int | None
     status: str
     created_at: datetime
+    note: str | None = None
+    agent_id: str | None = None
+    agent_name: str | None = None
+    priority: str = "normal"
+    decision_note: str | None = None
+    task_id: int | None = None
+    task_status: str | None = None
 
     @classmethod
     def from_row(cls, row: Any) -> "IntelItemOut":
         it = row.intel_type
         st = row.status
+        typ = it.value if hasattr(it, "value") else str(it)
+        ag = getattr(row, "agent", None)
+        tk = getattr(row, "task", None)
+        ts = None
+        if tk is not None:
+            tst = tk.status
+            ts = tst.value if hasattr(tst, "value") else str(tst)
         return cls(
             id=row.id,
             title=row.title,
             source=row.source,
-            type=it.value if hasattr(it, "value") else str(it),
+            type=typ,
+            category=typ,
             score=row.score,
             status=st.value if hasattr(st, "value") else str(st),
             created_at=row.created_at,
+            note=getattr(row, "note", None),
+            agent_id=getattr(row, "agent_id", None),
+            agent_name=ag.name if ag else None,
+            priority=getattr(row, "priority", None) or "normal",
+            decision_note=getattr(row, "decision_note", None),
+            task_id=getattr(row, "task_id", None),
+            task_status=ts,
         )
 
 
@@ -127,7 +150,21 @@ class AppSummaryOut(BaseModel):
     status: str
 
 
+class IntelPipelineKpiOut(BaseModel):
+    """Flux Intel : délais, qualité d’implémentation, blocages."""
+
+    avg_days_new_to_decision: float | None
+    avg_days_alert: bool  # True si > 7 jours
+    implementation_rate_pct: float | None
+    implementation_rate_alert: bool  # True si < 70 %
+    approved_without_task: int
+    approved_without_task_alert: bool
+    implementing_stuck_over_14d: int
+    implementing_stuck_alert: bool
+
+
 class DashboardOut(BaseModel):
     kpis: KpiOut
     apps: list[AppSummaryOut]
     intel: list[IntelItemOut]
+    intel_kpis: IntelPipelineKpiOut | None = None

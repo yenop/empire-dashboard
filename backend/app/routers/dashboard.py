@@ -2,12 +2,13 @@ from decimal import Decimal
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
 from app.deps import get_current_username
 from app.models import AgentModel, AgentStatus, AppModel, AppStatus, IntelModel
 from app.schemas import AppSummaryOut, DashboardOut, IntelItemOut, KpiOut
+from app.services.intel_kpis import compute_intel_pipeline_kpis
 
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
 
@@ -46,7 +47,13 @@ def get_dashboard(
     ]
 
     intel_rows = (
-        db.scalars(select(IntelModel).order_by(IntelModel.created_at.desc()).limit(12))
+        db.scalars(
+            select(IntelModel)
+            .options(joinedload(IntelModel.agent), joinedload(IntelModel.task))
+            .order_by(IntelModel.created_at.desc())
+            .limit(12)
+        )
+        .unique()
         .all()
     )
     intel = [IntelItemOut.from_row(i) for i in intel_rows]
@@ -62,4 +69,5 @@ def get_dashboard(
         ),
         apps=apps,
         intel=intel,
+        intel_kpis=compute_intel_pipeline_kpis(db),
     )

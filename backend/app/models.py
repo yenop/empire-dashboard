@@ -41,6 +41,7 @@ class TaskPriority(str, enum.Enum):
     low = "low"
     medium = "medium"
     high = "high"
+    critical = "critical"
 
 
 class IntelType(str, enum.Enum):
@@ -56,11 +57,14 @@ class IntelType(str, enum.Enum):
 
 
 class IntelStatus(str, enum.Enum):
-    pending = "pending"
+    new = "new"
+    reviewed = "reviewed"
+    pending_decision = "pending_decision"
     approved = "approved"
-    implemented = "implemented"
-    borderline = "borderline"
     rejected = "rejected"
+    implementing = "implementing"
+    implemented = "implemented"
+    verified = "verified"
 
 
 class AppModel(Base):
@@ -137,6 +141,18 @@ class TaskModel(Base):
         server_default=func.current_timestamp(),
         onupdate=func.current_timestamp(),
     )
+    intel_item_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("intel.id", use_alter=True, name="fk_tasks_intel_item"),
+        nullable=True,
+    )
+
+    intel_item: Mapped["IntelModel | None"] = relationship(
+        "IntelModel",
+        foreign_keys=[intel_item_id],
+        primaryjoin="TaskModel.intel_item_id == IntelModel.id",
+        overlaps="task",
+    )
 
     agent: Mapped["AgentModel | None"] = relationship(back_populates="tasks")
     app: Mapped["AppModel | None"] = relationship(back_populates="tasks")
@@ -153,11 +169,35 @@ class IntelModel(Base):
     )
     score: Mapped[int | None] = mapped_column(Integer, nullable=True)
     status: Mapped[IntelStatus] = mapped_column(
-        Enum(IntelStatus, native_enum=False, length=20), default=IntelStatus.pending
+        Enum(IntelStatus, native_enum=False, length=32), default=IntelStatus.pending_decision
     )
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    agent_id: Mapped[str | None] = mapped_column(String(50), ForeignKey("agents.id"), nullable=True)
+    decision_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    decision_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    task_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("tasks.id", use_alter=True, name="fk_intel_task"),
+        nullable=True,
+    )
+    implemented_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    verified_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    priority: Mapped[str] = mapped_column(String(20), default="normal")
     created_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.current_timestamp()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        server_default=func.current_timestamp(),
+        onupdate=func.current_timestamp(),
+    )
+
+    agent: Mapped["AgentModel | None"] = relationship()
+    task: Mapped["TaskModel | None"] = relationship(
+        "TaskModel",
+        foreign_keys=[task_id],
+        primaryjoin="IntelModel.task_id == TaskModel.id",
+        overlaps="intel_item",
     )
 
 

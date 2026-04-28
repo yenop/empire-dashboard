@@ -26,7 +26,7 @@
     </div>
     <div class="row-panels">
       <AppList :apps="data.apps" />
-      <IntelFeed :items="data.intel" />
+      <IntelFeed :items="data.intel" :intel-kpis="data.intel_kpis" @refresh="loadDashboard" />
     </div>
     <AgentOpsPanel />
   </div>
@@ -40,7 +40,7 @@ import AppList from '@/components/dashboard/AppList.vue'
 import IntelFeed from '@/components/dashboard/IntelFeed.vue'
 import AgentOpsPanel from '@/components/dashboard/AgentOpsPanel.vue'
 
-const data = ref({ kpis: null, apps: [], intel: [] })
+const data = ref({ kpis: null, apps: [], intel: [], intel_kpis: null })
 const loading = ref(true)
 const err = ref('')
 const oc = ref(null)
@@ -58,7 +58,7 @@ const kpiItems = computed(() => {
   ]
 })
 
-onMounted(async () => {
+async function loadDashboard() {
   try {
     const [dash, sup] = await Promise.all([
       api.get('/api/dashboard'),
@@ -68,6 +68,12 @@ onMounted(async () => {
     oc.value = sup.data
   } catch (e) {
     err.value = e.response?.data?.detail || 'Impossible de charger le dashboard.'
+  }
+}
+
+onMounted(async () => {
+  try {
+    await loadDashboard()
   } finally {
     loading.value = false
   }

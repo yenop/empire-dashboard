@@ -1,7 +1,8 @@
+from datetime import datetime, timezone
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -11,9 +12,16 @@ from app.models import (
     ApiKeyRequestModel,
     ApiKeyRequestStatus,
     ContentPipelineModel,
+    IntelModel,
+    IntelStatus,
     NicheCandidateModel,
     SeoRankModel,
+    TaskModel,
+    TaskPriority,
+    TaskStatus,
 )
+from app.services.task_ops import recount_agent_tasks
+from app.services.wire_outbound import append_nerve_note
 
 router = APIRouter(prefix="/api/ops", tags=["ops"])
 
@@ -145,3 +153,112 @@ def patch_api_request(
         "status": row.status.value,
         "created_at": row.created_at.isoformat() if row.created_at else None,
     }
+
+
+def _intel_priority_to_task_priority(p: str | None) -> TaskPriority:
+    key = (p or "normal").strip().lower()
+    mapping: dict[str, TaskPriority] = {
+        "low": TaskPriority.low,
+        "normal": TaskPriority.medium,
+        "medium": TaskPriority.medium,
+        "high": TaskPriority.high,
+        "critical": TaskPriority.critical,
+    }
+    return mapping.get(key, TaskPriority.medium)
+
+
+_DECIDE_STATUSES = frozenset(
+    {
+        IntelStatus.new,
+        IntelStatus.reviewed,
+        IntelStatus.pending_decision,
+    }
+)
+
+
+class IntelDecisionBody(BaseModel):
+    action: Literal["approve", "reject"]
+    note: str | None = Field(default=None, max_length=8000)
+    priority: str | None = Field(
+        default="normal",
+        description="low | normal | high | critical",
+    )
+
+
+@router.patch("/intel/{item_id}/decide")
+def decide_intel(
+    item_id: int,
+    body: IntelDecisionBody,
+    _username: str = Depends(get_current_username),
+    db: Session = Depends(get_db),
+) -> dict:
+    item = db.get(IntelModel, item_id)
+    if not item:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Intel introuvable")
+    if item.status not in _DECIDE_STATUSES:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail="Statut incompatible avec une décision (attendu: à décider)",
+        )
+
+    if body.action == "reject":
+        item.status = IntelStatus.rejected
+        item.decision_note = body.note
+        item.decision_at = datetime.now(timezone.utc)
+        db.commit()
+        db.refresh(item)
+        return {"status": item.status.value, "task_id": None}
+
+    pr = _intel_priority_to_task_priority(body.priority)
+    item.priority = (body.priority or "normal").strip().lower()
+    item.decision_note = body.note
+    item.decision_at = datetime.now(timezone.utc)
+    item.status = IntelStatus.approved
+
+    task = TaskModel(
+        title=f"[Intel] {item.title}",
+        agent_id=item.agent_id,
+        app_id=None,
+        status=TaskStatus.todo,
+        priority=pr,
+        intel_item_id=item.id,
+    )
+    db.add(task)
+    db.flush()
+    item.task_id = task.id
+    recount_agent_tasks(db, item.agent_id)
+
+    note_txt = (
+        f"INTEL APPROUVÉ — {item.title}\nPriorité: {item.priority}\nNote: {body.note or '—'}"
+    )
+    if item.agent_id:
+        ok, _ = append_nerve_note(db, item.agent_id, note_txt)
+        if not ok:
+            db.commit()
+    else:
+        db.commit()
+
+    db.refresh(item)
+    db.refresh(task)
+    return {"status": item.status.value, "task_id": item.task_id}
+
+
+@router.patch("/intel/{item_id}/verify")
+def verify_intel(
+    item_id: int,
+    _username: str = Depends(get_current_username),
+    db: Session = Depends(get_db),
+) -> dict:
+    item = db.get(IntelModel, item_id)
+    if not item:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Intel introuvable")
+    if item.status != IntelStatus.implemented:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail="Seules les entrées au statut « implemented » peuvent être vérifiées",
+        )
+    item.status = IntelStatus.verified
+    item.verified_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(item)
+    return {"status": item.status.value, "verified_at": item.verified_at.isoformat() if item.verified_at else None}

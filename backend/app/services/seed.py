@@ -151,26 +151,26 @@ def seed_if_empty(db: Session) -> None:
             IntelType.seo,
             8,
             IntelStatus.implemented,
-            "Gaston",
+            "gaston",
         ),
         (
             "Intégrer webhook RevenueCat pour MRR live",
             "RevenueCat docs",
             IntelType.api,
             7,
-            IntelStatus.pending,
-            "Yvon",
+            IntelStatus.pending_decision,
+            "yvon",
         ),
         (
             "Tester modèle économy sur tâches simples",
             "OpenClaw",
             IntelType.model,
             6,
-            IntelStatus.borderline,
-            "Édith",
+            IntelStatus.pending_decision,
+            "edith",
         ),
     ]
-    for title, source, itype, score, ist, _agent in intel_rows:
+    for title, source, itype, score, ist, agent_id in intel_rows:
         db.add(
             IntelModel(
                 title=title,
@@ -178,6 +178,7 @@ def seed_if_empty(db: Session) -> None:
                 intel_type=itype,
                 score=score,
                 status=ist,
+                agent_id=agent_id,
             )
         )
 
